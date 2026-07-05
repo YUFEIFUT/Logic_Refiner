@@ -70,6 +70,13 @@ export default function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const clearDetailState = () => {
+    setSelectedRecord(null);
+    setResult(null);
+    setExplanation(null);
+    setActualCycles(0);
+  };
+
   const fetchHistory = () => {
     fetch('/api/refinements')
       .then(res => res.json())
@@ -94,10 +101,7 @@ export default function App() {
 
   const loadHistoryRecord = (record: HistoryRecord) => {
     if (selectedRecord?.id === record.id) {
-      setSelectedRecord(null);
-      setResult(null);
-      setExplanation(null);
-      setActualCycles(0);
+      clearDetailState();
       return;
     }
     setSelectedRecord(record);
@@ -325,7 +329,10 @@ export default function App() {
         {/* History Records Section */}
         <section className="mb-16">
           <button
-            onClick={() => setShowHistory(!showHistory)}
+            onClick={() => {
+              if (showHistory) clearDetailState();
+              setShowHistory(!showHistory);
+            }}
             className="flex items-center gap-3 group w-full text-left"
           >
             <History className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
