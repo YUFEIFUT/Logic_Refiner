@@ -2,11 +2,14 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import { initDb, saveRefinement, getRefinements, getRefinementById } from "./src/db";
+import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+let db: SqlJsDatabase;
 
 app.use(express.json());
 
@@ -100,6 +103,9 @@ app.get("/api/refine", async (req, res) => {
   try {
     console.log(`Refining: "${input}" with ${cycles} cycles.`);
 
+    // Collect stages for database storage
+    const collectedStages: { name: string; title: string; content: string }[] = [];
+
     // --- STEP 1: The Architect ---
     sendEvent({ log: "架构组正在解析原始逻辑空间..." });
     const architectPrompt = `将以下观点转化为基本的核心因果逻辑结构，识别观点背后的变量关系与隐含假设。
@@ -108,6 +114,7 @@ app.get("/api/refine", async (req, res) => {
     const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。请使用中文。";
     const architectOutput = await generate(architectPrompt, architectSystem);
     sendEvent({ stage: "architect", content: architectOutput });
+    collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architectOutput });
 
     let currentLogic = architectOutput;
     let lastRefinement = "";
@@ -127,6 +134,7 @@ app.get("/api/refine", async (req, res) => {
       const redTeamSystem = "你是 'The Red Team'。你是一个极致的怀疑论者。你的任务是找出当前逻辑在现实世界中无法闭环的证据。请使用中文。";
       const redTeamOutput = await generate(redTeamPrompt, redTeamSystem);
       sendEvent({ stage: "redteam", content: redTeamOutput, cycle: c });
+      collectedStages.push({ name: "redteam", title: `红方压力测试 #${c} (Red Team)`, content: redTeamOutput });
 
       sendEvent({ log: `第 ${c}/${cycles} 轮迭代：合成器正在重塑逻辑...`, cycle: c });
       
@@ -144,6 +152,7 @@ app.get("/api/refine", async (req, res) => {
       currentLogic = synthesizerOutput;
       lastRefinement = synthesizerOutput;
       sendEvent({ stage: "synthesizer", content: synthesizerOutput, cycle: c });
+      collectedStages.push({ name: "synthesizer", title: `合成与剥离 #${c} (Synthesizer)`, content: synthesizerOutput });
     }
 
     // --- STEP 4: The Boundary Definer ---
@@ -156,6 +165,7 @@ app.get("/api/refine", async (req, res) => {
     const boundarySystem = "你是 'The Boundary Definer'。你确定人类认知的边界。请使用中文。";
     const boundaryOutput = await generate(boundaryPrompt, boundarySystem);
     sendEvent({ stage: "boundary", content: boundaryOutput });
+    collectedStages.push({ name: "boundary", title: "边界判定 (Boundary Definer)", content: boundaryOutput });
 
     // --- STEP 5: Final Crystallization ---
     sendEvent({ log: "正在提炼真理晶体..." });
@@ -187,17 +197,27 @@ app.get("/api/refine", async (req, res) => {
     const explanation = await generate(explainerPrompt, explainerSystem);
     sendEvent({ stage: "explanation", content: explanation });
 
+    // Save refinement result to database
+    const refinementId = saveRefinement(db, {
+      input,
+      finalLogic,
+      explanation,
+      stages: collectedStages,
+      cycles,
+    });
+    sendEvent({ refinementId });
+
     sendEvent({ done: true });
     res.end();
 
   } catch (error: any) {
     console.error("Error in refinement:", error);
     try {
-      sendEvent({ 
-        stage: "error", 
-        message: error.message?.includes("429") || error.message?.includes("QUOTA") 
-          ? "API 配额已耗尽。请稍后再试或降低演化深度。" 
-          : (error.message || "演化引擎发生未预期的核心崩溃。") 
+      sendEvent({
+        stage: "error",
+        message: error.message?.includes("429") || error.message?.includes("QUOTA")
+          ? "API 配额已耗尽。请稍后再试或降低演化深度。"
+          : (error.message || "演化引擎发生未预期的核心崩溃。")
       });
       res.end();
     } catch (e) {
@@ -206,7 +226,31 @@ app.get("/api/refine", async (req, res) => {
   }
 });
 
+// API: Get refinement history
+app.get("/api/refinements", (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 20;
+  const refinements = getRefinements(db, limit);
+  res.json(refinements);
+});
+
+// API: Get single refinement by id
+app.get("/api/refinements/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+  const refinement = getRefinementById(db, id);
+  if (!refinement) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  res.json(refinement);
+});
+
 async function startServer() {
+  // Initialize database
+  db = await initDb();
+  console.log("Database initialized.");
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
