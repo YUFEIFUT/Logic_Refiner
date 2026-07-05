@@ -66,6 +66,7 @@ export default function App() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -316,47 +317,67 @@ export default function App() {
 
         {/* History Records Section */}
         <section className="mb-16">
-          <div className="flex items-center gap-3 mb-4">
-            <History className="w-4 h-4 text-zinc-500" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">历史记录</span>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-3 group w-full text-left"
+          >
+            <History className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-white transition-colors">
+              历史记录
+            </span>
             {historyRecords.length > 0 && (
               <span className="text-[9px] text-zinc-600">({historyRecords.length})</span>
             )}
-          </div>
-          {historyRecords.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {historyRecords.map((record) => (
-                <button
-                  key={record.id}
-                  onClick={() => loadHistoryRecord(record)}
-                  className={cn(
-                    "text-left p-4 border transition-all hover:border-white/30",
-                    selectedRecord?.id === record.id
-                      ? "border-white bg-white/5"
-                      : "border-white/10 hover:bg-white/5"
-                  )}
-                >
-                  <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">
-                    {new Date(record.created_at).toLocaleDateString('zh-CN')}
+            <ChevronRight className={cn(
+              "w-3 h-3 text-zinc-600 transition-transform",
+              showHistory && "rotate-90"
+            )} />
+          </button>
+          <AnimatePresence>
+            {showHistory && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                {historyRecords.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+                    {historyRecords.map((record) => (
+                      <button
+                        key={record.id}
+                        onClick={() => loadHistoryRecord(record)}
+                        className={cn(
+                          "text-left p-4 border transition-all hover:border-white/30",
+                          selectedRecord?.id === record.id
+                            ? "border-white bg-white/5"
+                            : "border-white/10 hover:bg-white/5"
+                        )}
+                      >
+                        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">
+                          {new Date(record.created_at).toLocaleDateString('zh-CN')}
+                        </div>
+                        <div className="text-xs font-bold text-white truncate mb-2">
+                          {record.input}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 line-clamp-2">
+                          {record.finalLogic}
+                        </div>
+                        <div className="mt-2 text-[8px] text-zinc-600 uppercase">
+                          {record.cycles} 轮演化
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  <div className="text-xs font-bold text-white truncate mb-2">
-                    {record.input}
+                ) : (
+                  <div className="border border-dashed border-white/10 p-8 text-center mt-4">
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-widest">暂无历史记录</p>
+                    <p className="text-[9px] text-zinc-700 mt-2">完成一次逻辑精炼后，结果将自动保存到这里</p>
                   </div>
-                  <div className="text-[10px] text-zinc-400 line-clamp-2">
-                    {record.finalLogic}
-                  </div>
-                  <div className="mt-2 text-[8px] text-zinc-600 uppercase">
-                    {record.cycles} 轮演化
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="border border-dashed border-white/10 p-8 text-center">
-              <p className="text-[10px] text-zinc-600 uppercase tracking-widest">暂无历史记录</p>
-              <p className="text-[9px] text-zinc-700 mt-2">完成一次逻辑精炼后，结果将自动保存到这里</p>
-            </div>
-          )}
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
 
         {/* Error State */}

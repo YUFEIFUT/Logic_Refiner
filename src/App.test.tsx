@@ -12,7 +12,8 @@ describe('History Feature', () => {
     vi.clearAllMocks();
   });
 
-  it('should fetch and display history on mount', async () => {
+  it('should fetch and display history when expanded', async () => {
+    const user = userEvent.setup();
     const mockHistory = [
       {
         id: 1,
@@ -41,6 +42,14 @@ describe('History Feature', () => {
 
     render(<App />);
 
+    // Wait for history to load
+    await waitFor(() => {
+      expect(screen.getByText('历史记录')).toBeInTheDocument();
+    });
+
+    // Click to expand history
+    await user.click(screen.getByText('历史记录'));
+
     await waitFor(() => {
       expect(screen.getByText('努力就会成功')).toBeInTheDocument();
       expect(screen.getByText('知识就是力量')).toBeInTheDocument();
@@ -60,7 +69,7 @@ describe('History Feature', () => {
     });
   });
 
-  it('should show history section when records exist', async () => {
+  it('should show history section header when records exist', async () => {
     const mockHistory = [
       {
         id: 1,
