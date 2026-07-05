@@ -93,6 +93,13 @@ export default function App() {
   };
 
   const loadHistoryRecord = (record: HistoryRecord) => {
+    if (selectedRecord?.id === record.id) {
+      setSelectedRecord(null);
+      setResult(null);
+      setExplanation(null);
+      setActualCycles(0);
+      return;
+    }
     setSelectedRecord(record);
     let stages: RefinementStage[] = [];
     try {
@@ -208,9 +215,9 @@ export default function App() {
 
   // Dynamic configuration for stages
   const getStageConfig = (name: string) => {
-    if (name.includes("对抗")) return { icon: ShieldAlert, color: "text-red-400", border: "border-red-500/20", bg: "bg-red-500/5" };
-    if (name.includes("精炼")) return { icon: Zap, color: "text-blue-400", border: "border-blue-500/20", bg: "bg-blue-500/5" };
-    if (name.includes("架构")) return { icon: Cpu, color: "text-zinc-400", border: "border-white/20", bg: "bg-white/5" };
+    if (name.includes("对抗") || name.includes("redteam")) return { icon: ShieldAlert, color: "text-red-400", border: "border-red-500/20", bg: "bg-red-500/5" };
+    if (name.includes("精炼") || name.includes("synthesizer")) return { icon: Zap, color: "text-blue-400", border: "border-blue-500/20", bg: "bg-blue-500/5" };
+    if (name.includes("架构") || name.includes("architect")) return { icon: Cpu, color: "text-zinc-400", border: "border-white/20", bg: "bg-white/5" };
     return { icon: MapPin, color: "text-green-400", border: "border-green-500/20", bg: "bg-green-500/5" };
   };
 
