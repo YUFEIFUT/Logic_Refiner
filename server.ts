@@ -30,7 +30,7 @@ async function generate(prompt: string, systemInstruction: string, retries = 5) 
   for (let i = 0; i < retries; i++) {
     try {
       // Add a small artificial delay to avoid hitting rate limits too fast
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // await new Promise(resolve => setTimeout(resolve, 800));
       
       const response = await fetch(ENDPOINT, {
         method: "POST",
@@ -71,16 +71,16 @@ async function generate(prompt: string, systemInstruction: string, retries = 5) 
       console.error(`Attempt ${i + 1} failed:`, error.message);
       const isQuotaError = error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED") || error.message?.toLowerCase().includes("quota") || error.message?.toLowerCase().includes("limit");
       if (isQuotaError && i < retries - 1) {
-        const waitTime = 5000 + (i * 10000); 
+        const waitTime = 5000 + (i * 10000);
         console.log(`Quota or rate limit hit (Attempt ${i + 1}), waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        // await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }
       if (i === retries - 1) {
         throw error;
       }
       // Wait a bit on normal error before retry
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
   throw new Error("Maximum retries reached for API generation.");
