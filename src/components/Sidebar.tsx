@@ -66,7 +66,7 @@ export default function Sidebar({ isOpen, onToggle, onNewChat, children }: Sideb
           </div>
 
           {/* Content Area - scrollable */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto scrollbar-hover">
             {children}
           </div>
         </div>

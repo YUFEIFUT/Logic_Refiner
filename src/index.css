@@ -20,4 +20,26 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
   }
+
+  .scrollbar-hover::-webkit-scrollbar {
+    width: 0;
+    background: transparent;
+  }
+  .scrollbar-hover {
+    scrollbar-width: none;
+  }
+  .scrollbar-hover:hover::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-hover:hover::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-hover:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+  }
+  .scrollbar-hover:hover {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
 }
