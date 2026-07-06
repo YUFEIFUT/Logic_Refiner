@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, saveRefinement, getRefinements, getRefinementById } from './db';
+import { initDb, saveRefinement, getRefinements, getRefinementById, createRefinement, updateRefinement } from './db';
 
 describe('database', () => {
   let db: ReturnType<typeof initDb> extends Promise<infer T> ? T : never;
@@ -19,6 +19,46 @@ describe('database', () => {
       });
 
       expect(id).toBeGreaterThan(0);
+    });
+  });
+
+  describe('createRefinement', () => {
+    it('should create an empty record and return its id', () => {
+      const id = createRefinement(db, '测试输入', 2);
+      expect(id).toBeGreaterThan(0);
+    });
+
+    it('should create record with only input and cycles', () => {
+      const id = createRefinement(db, '测试输入', 2);
+      const record = getRefinementById(db, id);
+      expect(record).not.toBeNull();
+      expect(record!.input).toBe('测试输入');
+      expect(record!.cycles).toBe(2);
+      expect(record!.finalLogic).toBe('');
+      expect(record!.stages).toBe('[]');
+    });
+  });
+
+  describe('updateRefinement', () => {
+    it('should update an existing record', () => {
+      const id = createRefinement(db, '测试输入', 2);
+      updateRefinement(db, id, {
+        finalLogic: '最终结论',
+        explanation: '解读内容',
+        stages: [{ name: 'architect', title: '逻辑解构', content: '分析结果' }],
+      });
+
+      const record = getRefinementById(db, id);
+      expect(record!.finalLogic).toBe('最终结论');
+      expect(record!.explanation).toBe('解读内容');
+      expect(JSON.parse(record!.stages)).toEqual([
+        { name: 'architect', title: '逻辑解构', content: '分析结果' }
+      ]);
+    });
+
+    it('should return false for non-existent id', () => {
+      const result = updateRefinement(db, 999, { finalLogic: 'test' });
+      expect(result).toBe(false);
     });
   });
 

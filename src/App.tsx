@@ -62,6 +62,9 @@ export default function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const stagesRef = useRef<RefinementStage[]>([]);
+  const finalLogicRef = useRef<string>('');
+  const explanationRef = useRef<string | null>(null);
 
   const clearDetailState = () => {
     setSelectedRecord(null);
@@ -123,7 +126,22 @@ export default function App() {
     setActualCycles(0);
     setCurrentLog("初始化引擎中...");
 
+    let currentRecordId: number | null = null;
+    stagesRef.current = [];
+
     try {
+      // Create empty record in database
+      const createRes = await fetch('/api/refinements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input, cycles }),
+      });
+      if (createRes.ok) {
+        const { id } = await createRes.json();
+        currentRecordId = id;
+        setHistoryRefreshKey(prev => prev + 1);
+      }
+
       const eventSource = new EventSource(`/api/refine?input=${encodeURIComponent(input)}&cycles=${cycles}`);
 
       eventSource.onmessage = (event) => {
@@ -138,13 +156,20 @@ export default function App() {
             setError(data.message);
             setIsLoading(false);
             eventSource.close();
+            // Delete incomplete record on error
+            if (currentRecordId) {
+              fetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
+              setHistoryRefreshKey(prev => prev + 1);
+            }
             return;
           }
           if (data.stage === "finalLogic") {
             setResult(prev => prev ? { ...prev, finalLogic: data.content } : null);
+            finalLogicRef.current = data.content;
             setActualCycles(data.actualCycles);
           } else if (data.stage === "explanation") {
             setExplanation(data.content);
+            explanationRef.current = data.content;
           } else {
             const stageMap: Record<string, { name: string, title: string }> = {
               architect: { name: "初始架构", title: "逻辑解构 (Architect)" },
@@ -170,6 +195,7 @@ export default function App() {
                     newStages.push({ ...config, content: data.content });
                   }
                 }
+                stagesRef.current = newStages;
                 return { ...prev, stages: newStages };
               });
             }
@@ -181,6 +207,18 @@ export default function App() {
           setIsLoading(false);
           setHistory(prev => [input, ...prev.slice(0, 4)]);
           setCurrentLog("演化完成。");
+          // Update record in database with final results
+          if (currentRecordId) {
+            fetch(`/api/refinements/${currentRecordId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                finalLogic: finalLogicRef.current,
+                explanation: explanationRef.current,
+                stages: stagesRef.current,
+              }),
+            }).catch(err => console.error('Failed to update refinement record:', err));
+          }
           setHistoryRefreshKey(prev => prev + 1);
         }
       };
@@ -189,6 +227,11 @@ export default function App() {
         setError("演化过程因意外中断。可能是API限流。");
         eventSource.close();
         setIsLoading(false);
+        // Delete incomplete record on error
+        if (currentRecordId) {
+          fetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
+          setHistoryRefreshKey(prev => prev + 1);
+        }
       };
 
     } catch (err: any) {

@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement } from "./src/db";
+import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement } from "./src/db";
 import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
@@ -248,6 +248,31 @@ app.get("/api/refinements/:id", (req, res) => {
     return res.status(404).json({ error: "Not found" });
   }
   res.json(refinement);
+});
+
+// API: Create refinement (empty record)
+app.post("/api/refinements", (req, res) => {
+  const { input, cycles } = req.body;
+  if (!input || typeof input !== 'string') {
+    return res.status(400).json({ error: "Missing or invalid input" });
+  }
+  const cyclesNum = parseInt(cycles) || 1;
+  const id = createRefinement(db, input, cyclesNum);
+  res.json({ id });
+});
+
+// API: Update refinement by id
+app.put("/api/refinements/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+  const { finalLogic, explanation, stages } = req.body;
+  const updated = updateRefinement(db, id, { finalLogic, explanation, stages });
+  if (!updated) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  res.json({ success: true });
 });
 
 // API: Delete refinement by id

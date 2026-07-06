@@ -84,6 +84,39 @@ export function saveRefinement(db: SqlJsDatabase, data: RefinementInput): number
   return id;
 }
 
+export function createRefinement(db: SqlJsDatabase, input: string, cycles: number): number {
+  db.run(
+    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles)
+     VALUES (?, '', NULL, '[]', ?)`,
+    [input, cycles]
+  );
+
+  const result = db.exec('SELECT last_insert_rowid()');
+  const id = result[0].values[0][0] as number;
+  saveDb(db);
+  return id;
+}
+
+export function updateRefinement(
+  db: SqlJsDatabase,
+  id: number,
+  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string }[] }
+): boolean {
+  const record = getRefinementById(db, id);
+  if (!record) return false;
+
+  const finalLogic = data.finalLogic ?? record.finalLogic;
+  const explanation = data.explanation !== undefined ? data.explanation : record.explanation;
+  const stages = data.stages ? JSON.stringify(data.stages) : record.stages;
+
+  db.run(
+    `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ? WHERE id = ?`,
+    [finalLogic, explanation, stages, id]
+  );
+  saveDb(db);
+  return true;
+}
+
 export function getRefinements(db: SqlJsDatabase): RefinementRecord[] {
   const results = db.exec(
     `SELECT id, input, final_logic, explanation, stages, cycles, created_at
