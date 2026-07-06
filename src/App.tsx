@@ -72,9 +72,6 @@ export default function App() {
 
   const clearDetailState = () => {
     setSelectedRecord(null);
-    setResult(null);
-    setExplanation(null);
-    setActualCycles(0);
   };
 
   const fetchHistory = () => {
@@ -102,6 +99,9 @@ export default function App() {
   const loadHistoryRecord = (record: HistoryRecord) => {
     if (selectedRecord?.id === record.id) {
       clearDetailState();
+      setResult(null);
+      setExplanation(null);
+      setActualCycles(0);
       return;
     }
     setSelectedRecord(record);
@@ -125,6 +125,8 @@ export default function App() {
     if (e) e.preventDefault();
     if (!input.trim()) return;
 
+    setSelectedRecord(null);
+    setShowHistory(false);
     setIsLoading(true);
     setResult({
       input,
@@ -330,7 +332,14 @@ export default function App() {
         <section className="mb-16">
           <button
             onClick={() => {
-              if (showHistory) clearDetailState();
+              if (showHistory) {
+                if (selectedRecord) {
+                  clearDetailState();
+                  setResult(null);
+                  setExplanation(null);
+                  setActualCycles(0);
+                }
+              }
               setShowHistory(!showHistory);
             }}
             className="flex items-center gap-3 group w-full text-left"
