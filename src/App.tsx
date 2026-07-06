@@ -72,6 +72,10 @@ export default function App() {
 
   const isMobile = () => window.innerWidth <= 768;
 
+  const smoothScrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSelectHistory = (record: HistoryRecord) => {
     if (selectedRecord?.id === record.id) {
       setSelectedRecord(null);
@@ -268,9 +272,9 @@ export default function App() {
           setExplanation(null);
           setActualCycles(0);
           setInput('');
-          window.scrollTo(0, 0);
+          smoothScrollToTop();
           if (isMobile()) setSidebarOpen(false);
-          requestAnimationFrame(() => inputRef.current?.focus());
+          setTimeout(() => inputRef.current?.focus(), 300);
         }}
       >
         <HistoryList
@@ -283,6 +287,7 @@ export default function App() {
               setResult(null);
               setExplanation(null);
               setActualCycles(0);
+              smoothScrollToTop();
             }
           }}
         />
