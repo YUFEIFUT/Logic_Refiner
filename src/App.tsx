@@ -61,6 +61,7 @@ export default function App() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const clearDetailState = () => {
     setSelectedRecord(null);
@@ -221,6 +222,7 @@ export default function App() {
           setActualCycles(0);
           setInput('');
           window.scrollTo(0, 0);
+          requestAnimationFrame(() => inputRef.current?.focus());
         }}
       >
         <HistoryList
@@ -274,6 +276,7 @@ export default function App() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative group">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
