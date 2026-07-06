@@ -85,7 +85,7 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
         <div key={record.id} className="relative group">
           <button
             onClick={() => onSelect(record)}
-            className={`w-full text-left px-3 py-3 border-b border-white/5 transition-colors hover:bg-white/5 ${
+            className={`w-full text-left px-3 py-3 border-b border-white/5 transition-all duration-150 hover:bg-white/5 ${
               selectedId === record.id ? 'bg-white/10 border-l-2 border-l-white' : ''
             }`}
           >
