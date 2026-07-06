@@ -220,6 +220,7 @@ export default function App() {
           setExplanation(null);
           setActualCycles(0);
           setInput('');
+          window.scrollTo(0, 0);
         }}
       >
         <HistoryList
