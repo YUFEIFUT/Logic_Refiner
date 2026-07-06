@@ -146,7 +146,7 @@ export default function App() {
         setHistoryRefreshKey(prev => prev + 1);
       }
 
-      const eventSource = new EventSource(`/api/refine?input=${encodeURIComponent(input)}&cycles=${cycles}`);
+      const eventSource = new EventSource(`/api/refine?input=${encodeURIComponent(input)}&cycles=${cycles}${currentRecordId ? `&id=${currentRecordId}` : ''}`);
 
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -211,18 +211,7 @@ export default function App() {
           setIsLoading(false);
           setHistory(prev => [input, ...prev.slice(0, 4)]);
           setCurrentLog("演化完成。");
-          // Update record in database with final results
-          if (currentRecordId) {
-            fetch(`/api/refinements/${currentRecordId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                finalLogic: finalLogicRef.current,
-                explanation: explanationRef.current,
-                stages: stagesRef.current,
-              }),
-            }).catch(err => console.error('Failed to update refinement record:', err));
-          }
+          // Backend now handles database update via id parameter
           setHistoryRefreshKey(prev => prev + 1);
         }
       };

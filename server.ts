@@ -87,9 +87,12 @@ async function generate(prompt: string, systemInstruction: string, retries = 5) 
 }
 
 app.get("/api/refine", async (req, res) => {
-  const { input, cycles: cyclesQuery } = req.query;
+  const { input, cycles: cyclesQuery, id: idQuery } = req.query;
   const cycles = parseInt(cyclesQuery as string) || 1;
-  
+  const recordId = idQuery ? parseInt(idQuery as string) : null;
+
+  console.log(`[GET /api/refine] Starting refinement: input="${input}", cycles=${cycles}, recordId=${recordId}`);
+
   if (!input) {
     return res.status(400).json({ error: "Missing input" });
   }
@@ -201,15 +204,28 @@ app.get("/api/refine", async (req, res) => {
     const explanation = await generate(explainerPrompt, explainerSystem);
     sendEvent({ stage: "explanation", content: explanation });
 
-    // Save refinement result to database
-    const refinementId = saveRefinement(db, {
-      input,
-      finalLogic,
-      explanation,
-      stages: collectedStages,
-      cycles,
-    });
-    sendEvent({ refinementId });
+    // Update or create refinement record in database
+    if (recordId) {
+      console.log(`[GET /api/refine] Updating existing record id=${recordId}`);
+      updateRefinement(db, recordId, {
+        finalLogic,
+        explanation,
+        stages: collectedStages,
+      });
+      sendEvent({ refinementId: recordId });
+    } else {
+      // Fallback: create new record (for backward compatibility)
+      console.log(`[GET /api/refine] No recordId provided, creating new record`);
+      const refinementId = saveRefinement(db, {
+        input,
+        finalLogic,
+        explanation,
+        stages: collectedStages,
+        cycles,
+      });
+      console.log(`[GET /api/refine] Created new record with id=${refinementId}`);
+      sendEvent({ refinementId });
+    }
 
     sendEvent({ done: true });
     res.end();
@@ -257,7 +273,9 @@ app.post("/api/refinements", (req, res) => {
     return res.status(400).json({ error: "Missing or invalid input" });
   }
   const cyclesNum = parseInt(cycles) || 1;
+  console.log(`[POST /api/refinements] Creating new record: input="${input}", cycles=${cyclesNum}`);
   const id = createRefinement(db, input, cyclesNum);
+  console.log(`[POST /api/refinements] Created record with id=${id}`);
   res.json({ id });
 });
 
