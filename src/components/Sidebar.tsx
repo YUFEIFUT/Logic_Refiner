@@ -1,5 +1,11 @@
 import React from 'react';
 import { Menu, Plus, ChevronsLeft } from 'lucide-react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -23,16 +29,24 @@ export default function Sidebar({ isOpen, onToggle, onNewChat, children }: Sideb
         </button>
       )}
 
+      {/* Backdrop overlay - only on mobile when open */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={onToggle}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar Panel */}
       <aside
         role="complementary"
-        className="fixed left-0 top-0 h-full bg-zinc-900 border-r border-white/10 overflow-hidden z-40"
-        style={{
-          width: isOpen ? '20vw' : '0px',
-          transition: 'width 200ms ease',
-        }}
+        className={cn(
+          "fixed left-0 top-0 h-full bg-zinc-900/30 md:bg-zinc-900 border-r border-white/10 overflow-hidden z-40 transition-all duration-200 backdrop-blur-sm md:backdrop-blur-none",
+          isOpen ? "w-[85vw] md:w-[20vw]" : "w-0"
+        )}
       >
-        <div className="w-[20vw] h-full flex flex-col">
+        <div className="w-[85vw] md:w-[20vw] h-full flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-3 border-b border-white/10">
             <button

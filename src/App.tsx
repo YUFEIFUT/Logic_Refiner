@@ -67,12 +67,15 @@ export default function App() {
     setSelectedRecord(null);
   };
 
+  const isMobile = () => window.innerWidth <= 768;
+
   const handleSelectHistory = (record: HistoryRecord) => {
     if (selectedRecord?.id === record.id) {
       setSelectedRecord(null);
       setResult(null);
       setExplanation(null);
       setActualCycles(0);
+      if (isMobile()) setSidebarOpen(false);
       return;
     }
     setSelectedRecord(record);
@@ -90,6 +93,7 @@ export default function App() {
     setExplanation(record.explanation);
     setActualCycles(record.cycles);
     setShowLogs(true);
+    if (isMobile()) setSidebarOpen(false);
   };
 
   const copyToClipboard = async (text: string, id: string) => {
@@ -222,6 +226,7 @@ export default function App() {
           setActualCycles(0);
           setInput('');
           window.scrollTo(0, 0);
+          if (isMobile()) setSidebarOpen(false);
           requestAnimationFrame(() => inputRef.current?.focus());
         }}
       >
