@@ -250,6 +250,11 @@ export default function App() {
     }
   }, [result?.finalLogic]);
 
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // Dynamic configuration for stages
   const getStageConfig = (name: string) => {
     if (name.includes("对抗") || name.includes("redteam")) return { icon: ShieldAlert, color: "text-red-400", border: "border-red-500/20", bg: "bg-red-500/5" };
