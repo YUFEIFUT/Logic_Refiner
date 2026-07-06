@@ -14,7 +14,11 @@ let db: SqlJsDatabase;
 app.use(express.json());
 
 // Initialize Xiaomi MiMo configuration
-const MIMO_API_KEY = process.env.MIMO_API_KEY || "sk-crb3qt4kn2ysmq4zpt3c7tqibhzinliytc48wgwonaxs34au";
+const MIMO_API_KEY = process.env.MIMO_API_KEY;
+if (!MIMO_API_KEY) {
+  console.error("MIMO_API_KEY is not configured. Please set it in .env file.");
+  process.exit(1);
+}
 const MODEL_NAME = "mimo-v2.5-pro";
 const ENDPOINT = "https://api.xiaomimimo.com/v1/chat/completions";
 
