@@ -52,7 +52,7 @@ async function generate(prompt: string, systemInstruction: string, retries = 5) 
           ],
           temperature: 0.8,
           top_p: 0.95,
-          max_completion_tokens: 2048
+          max_completion_tokens: 131072
         })
       });
 
