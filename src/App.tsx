@@ -26,6 +26,7 @@ import "katex/dist/katex.min.css";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import Sidebar from "./components/Sidebar";
+import HistoryList, { type HistoryRecord } from "./components/HistoryList";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -43,16 +44,6 @@ interface RefinementResult {
   stages: RefinementStage[];
 }
 
-interface HistoryRecord {
-  id: number;
-  input: string;
-  finalLogic: string;
-  explanation: string | null;
-  stages: string;
-  cycles: number;
-  created_at: string;
-}
-
 export default function App() {
   const [input, setInput] = useState("");
   const [cycles, setCycles] = useState(2);
@@ -65,10 +56,9 @@ export default function App() {
   const [currentLog, setCurrentLog] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -76,31 +66,9 @@ export default function App() {
     setSelectedRecord(null);
   };
 
-  const fetchHistory = () => {
-    fetch('/api/refinements')
-      .then(res => res.json())
-      .then(data => setHistoryRecords(data))
-      .catch(err => console.error('Failed to fetch history:', err));
-  };
-
-  // Fetch history on mount
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const copyToClipboard = async (text: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 1500);
-    } catch (err) {
-      console.error("Failed to copy!", err);
-    }
-  };
-
-  const loadHistoryRecord = (record: HistoryRecord) => {
+  const handleSelectHistory = (record: HistoryRecord) => {
     if (selectedRecord?.id === record.id) {
-      clearDetailState();
+      setSelectedRecord(null);
       setResult(null);
       setExplanation(null);
       setActualCycles(0);
@@ -123,12 +91,21 @@ export default function App() {
     setShowLogs(true);
   };
 
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    } catch (err) {
+      console.error("Failed to copy!", err);
+    }
+  };
+
   const handleRefine = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim()) return;
 
     setSelectedRecord(null);
-    setShowHistory(false);
     setIsLoading(true);
     setResult({
       input,
@@ -199,7 +176,7 @@ export default function App() {
           setIsLoading(false);
           setHistory(prev => [input, ...prev.slice(0, 4)]);
           setCurrentLog("演化完成。");
-          fetchHistory();
+          setHistoryRefreshKey(prev => prev + 1);
         }
       };
 
@@ -234,7 +211,23 @@ export default function App() {
       {/* Background Grid - subtle and sharp */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:2rem_2rem] pointer-events-none" />
 
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onNewChat={() => {
+          setSelectedRecord(null);
+          setResult(null);
+          setExplanation(null);
+          setActualCycles(0);
+          setInput('');
+        }}
+      >
+        <HistoryList
+          onSelect={handleSelectHistory}
+          selectedId={selectedRecord?.id}
+          refreshKey={historyRefreshKey}
+        />
+      </Sidebar>
 
       <main
         className="relative max-w-[1200px] mx-auto px-6 py-12 transition-[margin-left] duration-200"
@@ -335,81 +328,6 @@ export default function App() {
               ))}
             </div>
           )}
-        </section>
-
-        {/* History Records Section */}
-        <section className="mb-16">
-          <button
-            onClick={() => {
-              if (showHistory) {
-                if (selectedRecord) {
-                  clearDetailState();
-                  setResult(null);
-                  setExplanation(null);
-                  setActualCycles(0);
-                }
-              }
-              setShowHistory(!showHistory);
-            }}
-            className="flex items-center gap-3 group w-full text-left"
-          >
-            <History className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-white transition-colors">
-              历史记录
-            </span>
-            {historyRecords.length > 0 && (
-              <span className="text-[9px] text-zinc-600">({historyRecords.length})</span>
-            )}
-            <ChevronRight className={cn(
-              "w-3 h-3 text-zinc-600 transition-transform",
-              showHistory && "rotate-90"
-            )} />
-          </button>
-          <AnimatePresence>
-            {showHistory && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                {historyRecords.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-                    {historyRecords.map((record) => (
-                      <button
-                        key={record.id}
-                        onClick={() => loadHistoryRecord(record)}
-                        className={cn(
-                          "text-left p-4 border transition-all hover:border-white/30",
-                          selectedRecord?.id === record.id
-                            ? "border-white bg-white/5"
-                            : "border-white/10 hover:bg-white/5"
-                        )}
-                      >
-                        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">
-                          {new Date(record.created_at).toLocaleDateString('zh-CN')}
-                        </div>
-                        <div className="text-xs font-bold text-white truncate mb-2">
-                          {record.input}
-                        </div>
-                        <div className="text-[10px] text-zinc-400 line-clamp-2">
-                          {record.finalLogic}
-                        </div>
-                        <div className="mt-2 text-[8px] text-zinc-600 uppercase">
-                          {record.cycles} 轮演化
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="border border-dashed border-white/10 p-8 text-center mt-4">
-                    <p className="text-[10px] text-zinc-600 uppercase tracking-widest">暂无历史记录</p>
-                    <p className="text-[9px] text-zinc-700 mt-2">完成一次逻辑精炼后，结果将自动保存到这里</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </section>
 
         {/* Error State */}
