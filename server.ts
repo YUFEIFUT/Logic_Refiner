@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { initDb, saveRefinement, getRefinements, getRefinementById } from "./src/db";
+import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement } from "./src/db";
 import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
@@ -248,6 +248,19 @@ app.get("/api/refinements/:id", (req, res) => {
     return res.status(404).json({ error: "Not found" });
   }
   res.json(refinement);
+});
+
+// API: Delete refinement by id
+app.delete("/api/refinements/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+  const deleted = deleteRefinement(db, id);
+  if (!deleted) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  res.json({ success: true });
 });
 
 async function startServer() {

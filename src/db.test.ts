@@ -50,7 +50,7 @@ describe('database', () => {
       expect(result[1].input).toBe('第一个');
     });
 
-    it('should support limit parameter', () => {
+    it('should return all records without limit', () => {
       for (let i = 0; i < 5; i++) {
         saveRefinement(db, {
           input: `观点${i}`,
@@ -61,8 +61,8 @@ describe('database', () => {
         });
       }
 
-      const result = getRefinements(db, 3);
-      expect(result).toHaveLength(3);
+      const result = getRefinements(db);
+      expect(result).toHaveLength(5);
     });
   });
 

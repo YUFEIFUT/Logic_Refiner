@@ -84,13 +84,11 @@ export function saveRefinement(db: SqlJsDatabase, data: RefinementInput): number
   return id;
 }
 
-export function getRefinements(db: SqlJsDatabase, limit: number = 20): RefinementRecord[] {
+export function getRefinements(db: SqlJsDatabase): RefinementRecord[] {
   const results = db.exec(
     `SELECT id, input, final_logic, explanation, stages, cycles, created_at
      FROM refinements
-     ORDER BY id DESC
-     LIMIT ?`,
-    [limit]
+     ORDER BY id DESC`
   );
 
   if (results.length === 0) return [];
@@ -110,4 +108,12 @@ export function getRefinementById(db: SqlJsDatabase, id: number): RefinementReco
   if (results.length === 0 || results[0].values.length === 0) return null;
 
   return mapRowToRecord(results[0].columns, results[0].values[0]);
+}
+
+export function deleteRefinement(db: SqlJsDatabase, id: number): boolean {
+  db.run('DELETE FROM refinements WHERE id = ?', [id]);
+  const changes = db.exec('SELECT changes()');
+  const deleted = changes[0]?.values[0][0] as number > 0;
+  if (deleted) saveDb(db);
+  return deleted;
 }

@@ -227,6 +227,14 @@ export default function App() {
           onSelect={handleSelectHistory}
           selectedId={selectedRecord?.id}
           refreshKey={historyRefreshKey}
+          onDelete={(id) => {
+            if (selectedRecord?.id === id) {
+              setSelectedRecord(null);
+              setResult(null);
+              setExplanation(null);
+              setActualCycles(0);
+            }
+          }}
         />
       </Sidebar>
 
