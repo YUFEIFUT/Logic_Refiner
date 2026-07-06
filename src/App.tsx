@@ -4,14 +4,14 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
-import { 
-  Zap, 
-  ShieldAlert, 
-  Cpu, 
-  MapPin, 
-  ArrowRight, 
-  Loader2, 
-  CheckCircle2, 
+import {
+  Zap,
+  ShieldAlert,
+  Cpu,
+  MapPin,
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
   History,
   Terminal,
   ChevronRight,
@@ -25,6 +25,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import Sidebar from "./components/Sidebar";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -67,6 +68,7 @@ export default function App() {
   const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -232,7 +234,14 @@ export default function App() {
       {/* Background Grid - subtle and sharp */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:2rem_2rem] pointer-events-none" />
 
-      <main className="relative max-w-[1200px] mx-auto px-6 py-12">
+      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+
+      <main
+        className="relative max-w-[1200px] mx-auto px-6 py-12 transition-[margin-left] duration-200"
+        style={{
+          marginLeft: sidebarOpen ? '20vw' : '0px',
+        }}
+      >
         {/* Header - Artistic Flair style */}
         <header className="flex flex-col md:flex-row justify-between items-end border-b border-white/30 pb-4 mb-12">
           <motion.div
