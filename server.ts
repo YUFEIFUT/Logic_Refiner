@@ -167,11 +167,13 @@ app.get("/api/refine", async (req, res) => {
 
     // --- STEP 4: The Boundary Definer ---
     sendEvent({ log: "终态分析组正在划定真立场域..." });
-    const boundaryPrompt = `分析最终迭代后的精炼逻辑： ${currentLogic}
-    
-    1. 定义该逻辑有效的“场域”（适用空间与适用限度）。
+    const boundaryPrompt = `原始观点： "${input}"
+    最终迭代后的精炼逻辑： ${currentLogic}
+
+    1. 定义该逻辑有效的"场域"（适用空间与适用限度）。
     2. 评估该逻辑在复杂系统下的稳定性和局限性。
-    3. 提供一个关于此真理在现实世界中成立的概率或贝叶斯认知建议。`;
+    3. 提供一个关于此真理在现实世界中成立的概率或贝叶斯认知建议。
+    4. 【核心约束】你的分析必须与原始观点"${input}"相关，明确说明精炼后的逻辑如何回应了原始观点。`;
     const boundarySystem = "你是 'The Boundary Definer'。你确定人类认知的边界。请使用中文。";
     const boundaryOutput = await generate(boundaryPrompt, boundarySystem);
     sendEvent({ stage: "boundary", content: boundaryOutput });
