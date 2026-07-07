@@ -253,8 +253,8 @@ app.get("/api/refine", async (req, res) => {
 
 // API: Get refinement history
 app.get("/api/refinements", (req, res) => {
-  const limit = parseInt(req.query.limit as string) || 20;
-  const refinements = getRefinements(db, limit);
+  // const limit = parseInt(req.query.limit as string) || 20;
+  const refinements = getRefinements(db);
   res.json(refinements);
 });
 
