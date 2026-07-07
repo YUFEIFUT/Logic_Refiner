@@ -146,14 +146,17 @@ app.get("/api/refine", async (req, res) => {
       sendEvent({ log: `第 ${c}/${cycles} 轮迭代：合成器正在重塑逻辑...`, cycle: c });
       
       // STEP 3: Synthesizer
-      const synthesizerPrompt = `当前的逻辑体系遭遇了质疑。
+      const synthesizerPrompt = `原始观点： "${input}"
       当前逻辑： ${currentLogic}
       红方反例： ${redTeamOutput}
-      
-      请基于反例对逻辑进行“非线性”提炼。
+
+      请基于反例对逻辑进行"非线性"提炼。
       1. 剥离表面陈词滥调和鸡汤噪音。
       2. 引入更本质的隐性变量（如认知边界、环境熵增、非线性反馈）来融合红方的质疑。
-      3. 产出一个更深刻、更具包容性的哲学与理性底层逻辑关系（不要生搬硬套物理或代数方程式，关注概念融合与逻辑深度）。`;
+      3. 产出一个更深刻、更具包容性的哲学与理性底层逻辑关系（不要生搬硬套物理或代数方程式，关注概念融合与逻辑深度）。
+      4. 【核心约束】你产出的逻辑必须与原始观点"${input}"相关，是对该观点的深化或修正，而非脱离主题的新创造。
+      5. 【证伪约束】新逻辑应比当前逻辑更难找到反例。如果无法做到，需明确说明当前逻辑已是最佳状态。
+      6. 【简洁原则】尽可能简洁（奥卡姆剃刀原则），不要引入不必要的变量或条件，准确描述变量之间的因果关系，不多不少。`;
       const synthesizerSystem = "你是 'The Synthesizer'。你合成对抗性的意见并重塑更强壮的真理体系。请使用中文。";
       const synthesizerOutput = await generate(synthesizerPrompt, synthesizerSystem);
       currentLogic = synthesizerOutput;
