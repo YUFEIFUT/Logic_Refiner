@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -87,7 +87,8 @@ async function generate(prompt: string, systemInstruction: string, retries = 5) 
 }
 
 app.get("/api/refine", async (req, res) => {
-  const { input, cycles: cyclesQuery, id: idQuery } = req.query;
+  const { input: inputQuery, cycles: cyclesQuery, id: idQuery } = req.query;
+  const input = inputQuery as string;
   const cycles = parseInt(cyclesQuery as string) || 1;
   const recordId = idQuery ? parseInt(idQuery as string) : null;
 
