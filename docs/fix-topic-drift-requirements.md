@@ -164,12 +164,12 @@ LogicRefiner 的核心目标是**自动化人类的认知精炼过程**。以"�
 ```
 
 **验收标准**：
-- [ ] Crystallization prompt 不包含"形而上""震撼""张力"等表述
-- [ ] Crystallization prompt 包含"难以证伪""奥卡姆剃刀"等关键词
-- [ ] Crystallization prompt 包含原始输入 `input`
-- [ ] Crystallization prompt 包含系统性视角要求
-- [ ] 产出的结论与原始命题相关
-- [ ] 产出的结论简洁、难以反驳
+- [x] Crystallization prompt 不包含"形而上""震撼""张力"等表述
+- [x] Crystallization prompt 包含"难以证伪""奥卡姆剃刀"等关键词
+- [x] Crystallization prompt 包含原始输入 `input`
+- [x] Crystallization prompt 包含系统性视角要求
+- [x] 产出的结论与原始命题相关
+- [x] 产出的结论简洁、难以反驳
 
 ---
 
@@ -193,13 +193,49 @@ LogicRefiner 的核心目标是**自动化人类的认知精炼过程**。以"�
 - "具备系统性视角"
 
 **验收标准**：
-- [ ] system prompt 不包含"形而上""真理结晶"等表述
-- [ ] system prompt 包含"难以证伪""奥卡姆剃刀"等关键词
-- [ ] system prompt 与 user prompt 风格一致
+- [x] system prompt 不包含"形而上""真理结晶"等表述
+- [x] system prompt 包含"难以证伪""奥卡姆剃刀"等关键词
+- [x] system prompt 与 user prompt 风格一致
 
 ---
 
-### 1.6 （可选）降低温度参数
+### 1.6 Explainer prompt 同步更新
+
+**目标**：确保 Explainer（STEP 6）的措辞与 Crystallization（STEP 5）产出一致。当前 Explainer 仍使用"形而上""充满张力"等旧措辞，与新 Crystallization 产出的"简洁、难以反驳的逻辑表述"存在语义冲突。
+
+**修改位置**：`server.ts` Explainer prompt 和 system prompt
+
+**修改内容**：
+
+**Explainer prompt — 删除**：
+- "极具深度、形而上、充满张力的哲学结论"
+
+**Explainer prompt — 替换为**：
+```
+请对以下经过证伪检验的逻辑表述进行通俗易懂的解读：
+最终结论：${finalLogic}
+
+1. 用通俗、生动但绝不廉价的语言，解读该结论的核心含义与逻辑关系。
+2. 提供 2 个生活或工作中的实际对照/应用例子，帮助用户透彻理解这一结论。
+```
+
+**Explainer system prompt — 删除**：
+- "消除深奥知识的鸿沟"
+- "解读形而上真理"
+
+**Explainer system prompt — 替换为**：
+- "用通俗易懂的方式解读经过证伪检验的逻辑表述"
+- "帮助用户理解结论背后的因果关系和实际应用"
+
+**验收标准**：
+- [x] Explainer prompt 不包含"形而上""充满张力"等表述
+- [x] Explainer prompt 与 Crystallization 产出的"简洁逻辑表述"风格一致
+- [x] Explainer system prompt 不包含"形而上真理"
+- [x] 解读内容仍通俗易懂、有实际例子
+
+---
+
+### 1.7 （可选）降低温度参数
 
 **目标**：降低迭代过程中的随机性，减少主题漂移风险。
 
@@ -245,7 +281,8 @@ LogicRefiner 的核心目标是**自动化人类的认知精炼过程**。以"�
 ## 实施顺序
 
 1. **1.1** → **1.2** → **1.3** → **1.4** → **1.5**（核心修复，必须完成）
-2. **1.6**（可选，视测试效果决定）
+2. **1.6**（Explainer 同步，建议完成以保持 pipeline 一致性）
+3. **1.7**（可选，视测试效果决定）
 
 ## 风险评估
 

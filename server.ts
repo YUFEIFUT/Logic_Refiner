@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -180,32 +180,43 @@ app.get("/api/refine", async (req, res) => {
     collectedStages.push({ name: "boundary", title: "边界判定 (Boundary Definer)", content: boundaryOutput });
 
     // --- STEP 5: Final Crystallization ---
-    sendEvent({ log: "正在提炼真理晶体..." });
-    const crystallizationPrompt = `请基于以下所有分析过程，总结出一个最精炼、最震撼、最具洞察力的“形而上逻辑结论”或“真理律则”。
+    sendEvent({ log: "正在提炼最终结论..." });
+    const crystallizationPrompt = `请基于以下所有分析过程，产出一个经过证伪检验的、简洁的、难以反驳的逻辑表述。
+
     分析过程：
     - 初始架构：${architectOutput}
     - 最终演化逻辑：${currentLogic}
     - 边界分析：${boundaryOutput}
-    
-    【核心禁令 - 极其重要】：
-    绝对【不要】将现实的抽象概念强行塞进数学或物理公式里边（例如，绝对不要写类似 $Success = \\int (Effort \\times Luck) dt$ 或 $A = B + C$ 这种拼凑硬套、令人感到违和的别扭公式。这种强行将文字拼凑成伪科学公式的做法非常低幼和造作，应绝对禁止。）。
-    
+    - 原始命题： "${input}"
+
+    【核心标准 - 极其重要】：
+    1. 难以证伪：在目前已知的认知范围内，找不到轻易推翻它的反例
+    2. 奥卡姆剃刀：表述尽可能简洁，不引入不必要的变量或条件——真理往往是简单的
+    3. 准确描述因果关系：不多不少，恰好说清楚变量之间的本质关系
+    4. 与原始命题相关：必须是对原始命题"${input}"的精炼，而非脱离主题的新创造
+    5. 具备系统性视角：揭示命题在更大系统中的位置、边界和相互作用
+
+    【禁止事项】：
+    - 绝对不要产出"形而上""震撼""充满张力"等形式化表述
+    - 绝对不要将抽象概念强行塞进数学或物理公式
+
     【期望结果】：
-    1. 产出一个在哲学、形而上、逻辑层面极具深度且表意优美的精炼结论或普适规律。例如：“局部秩序的过度追求，往往是以系统更大全局的主动失序（熵增）为代价付出的代偿。”
-    2. 它应该是一个深刻的哲学命题或理性的底层因果律陈述句（中文），充满张力与克制的美感，绝非生搬硬套的伪物理或伪代数公式。
-    3. 仅输出这句极度精炼的进化真理结论，绝不要带有任何前言、引言、多余说明，也不需要任何 Markdown 格式标题。`;
-    const crystallizationSystem = "你负责产出最终的、高度提炼的“真理结晶”。请直接给出那句形而上、极具深度的结论，绝对拒绝任何强行拼凑的公式算式。请使用中文，直接给出该极简真理，无需废话。";
+    一个简洁、准确、难以反驳的逻辑表述，例如：
+    "努力是成功的必要非充分条件，其有效性受方向选择、环境结构和随机因素共同调节。"
+
+    仅输出这句精炼结论，绝不要带有任何前言、引言、多余说明。`;
+    const crystallizationSystem = "你是 'The Crystallizer'。你负责产出经过证伪检验的、简洁的、难以反驳的逻辑表述。实事求是、准确描述因果关系，符合奥卡姆剃刀原则，具备系统性视角。请使用中文，直接给出结论，无需废话。";
     const finalLogic = await generate(crystallizationPrompt, crystallizationSystem);
     sendEvent({ stage: "finalLogic", content: finalLogic, actualCycles: cycles });
 
     // --- STEP 6: The Explainer ---
-    sendEvent({ log: "布道者正在翻译深奥结论..." });
-    const explainerPrompt = `请对以下极具深度、形而上、充满张力的哲学结论进行充满智慧的解读：
+    sendEvent({ log: "解读者正在解读最终结论..." });
+    const explainerPrompt = `请对以下经过证伪检验的逻辑表述进行通俗易懂的解读：
     最终结论：${finalLogic}
     
-    1. 用通俗、生动但绝不廉价的语言，深度解读该结论背后的运行真谛。
-    2. 提供 2 个生活或工作中的实际对照/应用例子，帮助用户透彻理解这一真理。`;
-    const explainerSystem = "你是 'The Explainer'。你致力于消除深奥知识的鸿沟，用人类能感同身受的生活艺术来解读形而上真理。请使用中文。";
+    1. 用通俗、生动但绝不廉价的语言，解读该结论的核心含义与逻辑关系。
+    2. 提供 2 个生活或工作中的实际对照/应用例子，帮助用户透彻理解这一结论。`;
+    const explainerSystem = "你是 'The Explainer'。你用通俗易懂的方式解读经过证伪检验的逻辑表述，帮助用户理解结论背后的因果关系和实际应用。请使用中文。";
     const explanation = await generate(explainerPrompt, explainerSystem);
     sendEvent({ stage: "explanation", content: explanation });
 
