@@ -117,6 +117,15 @@ export function updateRefinement(
   return true;
 }
 
+export function updateRefinementInput(db: SqlJsDatabase, id: number, input: string): boolean {
+  const record = getRefinementById(db, id);
+  if (!record) return false;
+
+  db.run(`UPDATE refinements SET input = ? WHERE id = ?`, [input, id]);
+  saveDb(db);
+  return true;
+}
+
 export function getRefinements(db: SqlJsDatabase): RefinementRecord[] {
   const results = db.exec(
     `SELECT id, input, final_logic, explanation, stages, cycles, created_at

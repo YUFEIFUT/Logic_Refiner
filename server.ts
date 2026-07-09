@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement } from "./src/db";
+import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement, updateRefinementInput } from "./src/db";
 import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
@@ -389,6 +389,23 @@ app.put("/api/refinements/:id", (req, res) => {
   }
   const { finalLogic, explanation, stages } = req.body;
   const updated = updateRefinement(db, id, { finalLogic, explanation, stages });
+  if (!updated) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  res.json({ success: true });
+});
+
+// API: Rename refinement input
+app.put("/api/refinements/:id/input", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+  const { input } = req.body;
+  if (typeof input !== 'string' || !input.trim()) {
+    return res.status(400).json({ error: "Missing or invalid input" });
+  }
+  const updated = updateRefinementInput(db, id, input.trim());
   if (!updated) {
     return res.status(404).json({ error: "Not found" });
   }
