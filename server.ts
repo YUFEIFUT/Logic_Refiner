@@ -182,10 +182,16 @@ app.get("/api/refine", async (req, res) => {
 
     // --- STEP 1: The Architect ---
     sendEvent({ log: "架构组正在解析原始逻辑空间..." });
-    const architectPrompt = `将以下观点转化为基本的核心因果逻辑结构，识别观点背后的变量关系与隐含假设。
+    const architectPrompt = `将以下输入转化为基本的核心因果逻辑结构，识别背后的变量关系与隐含假设。
+
+    如果输入是一个问题，先给出一个你认为最合理、最有解释力的初步回答或立场，然后对该回答进行逻辑解构。
+    如果输入是一个观点或命题，直接进行逻辑解构。
+
     【注意】：请避免使用生硬、造作的物理/数学公式形式。关注于核心概念之间的因果推导与哲学结构。
-    观点： "${input}"`;
-    const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。请使用中文。";
+    【输出要求】：最终输出必须是一个明确的、可被证伪的逻辑结构（而非一个问题分析或开放式讨论），便于后续进行压力测试。
+
+    输入： "${input}"`;
+    const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。无论输入是问题还是命题，你都必须产出一个明确的逻辑立场作为后续精炼的起点。请使用中文。";
     const architectOutput = await generateWithThinking(architectPrompt, architectSystem);
     sendEvent({ stage: "architect", content: architectOutput });
     collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architectOutput });

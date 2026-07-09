@@ -327,7 +327,7 @@ export default function App() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="输入一个逻辑命题或人生格言 (如 '努力就会成功')..."
+                  placeholder="输入一个问题或逻辑命题 (如 '努力就会成功' / '黑暗的本质是什么')..."
                   className="w-full bg-zinc-900/50 border border-white/20 focus:border-white focus:outline-none px-6 py-4 text-sm tracking-wide placeholder:text-zinc-700 transition-colors"
                   disabled={isLoading}
                 />
