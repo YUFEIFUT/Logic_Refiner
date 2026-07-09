@@ -1,20 +1,21 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Logic Refiner
 
-# Run and deploy your AI Studio app
+基于多角色对抗迭代的逻辑精炼引擎。输入一个观点或问题，经过架构师解构、红方压力测试、合成器重塑等多轮对抗，产出经过证伪检验的、简洁的、难以反驳的逻辑表述。
 
-This contains everything you need to run your app locally.
+## 功能
 
-View your app in AI Studio: https://ai.studio/apps/9ef4fda6-ebaf-4423-9a21-40dcac51aabe
+- **多角色对抗**：架构师、红方、合成器、边界定义者、结晶者等角色协作精炼
+- **可配置迭代轮次**：支持 1-5 轮对抗迭代
+- **问题与命题兼容**：支持输入观点命题或问题，自动适配处理
+- **历史记录管理**：支持查看、重命名、删除历史精炼记录
+- **思考模式**：AI 调用开启思考（reasoning）能力，提升推理质量
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Copy `.env.example` to `.env` and fill in your `MIMO_API_KEY`
 3. Run the app:
    `npm run dev`
