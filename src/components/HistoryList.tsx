@@ -30,6 +30,10 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const truncatedIds = useRef<Set<number>>(new Set());
+  const [truncatedTick, setTruncatedTick] = useState(0);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const fetchRecords = () => {
     setLoading(true);
@@ -179,8 +183,30 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
                 </button>
               </div>
             ) : (
-              <div className="text-xs text-white truncate mb-1 pr-6">
-                {record.input}
+              <div className="relative mb-1 pr-6">
+                <div
+                  className="text-xs text-white truncate"
+                  ref={(el) => {
+                    if (el) {
+                      const isTruncated = el.scrollWidth > el.clientWidth;
+                      const wasTruncated = truncatedIds.current.has(record.id);
+                      if (isTruncated !== wasTruncated) {
+                        if (isTruncated) truncatedIds.current.add(record.id);
+                        else truncatedIds.current.delete(record.id);
+                        setTruncatedTick(t => t + 1);
+                      }
+                    }
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!truncatedIds.current.has(record.id)) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setHoveredId(record.id);
+                    setHoverPos({ x: rect.left, y: rect.top });
+                  }}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
+                  {record.input}
+                </div>
               </div>
             )}
             <div className="flex items-center gap-2 text-[9px] text-zinc-500">
@@ -278,6 +304,19 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
         type={toast?.type}
         onClose={() => setToast(null)}
       />
+
+      {hoveredId !== null && (() => {
+        const record = records.find(r => r.id === hoveredId);
+        if (!record) return null;
+        return (
+          <div
+            className="fixed z-[100] px-3 py-1.5 bg-zinc-800 border border-white/10 text-xs text-white rounded-lg shadow-xl pointer-events-none max-w-xs"
+            style={{ left: hoverPos.x, top: hoverPos.y - 8, transform: 'translateY(-100%)' }}
+          >
+            {record.input}
+          </div>
+        );
+      })()}
     </div>
   );
 }
