@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { History, Trash2, MoreHorizontal, Pencil, Check, X } from 'lucide-react';
 import Toast from './Toast';
+import { groupRecordsByTime } from '../utils/historyGrouping';
 
 export interface HistoryRecord {
   id: number;
@@ -34,6 +35,11 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
   const [truncatedTick, setTruncatedTick] = useState(0);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const groups = useMemo(
+    () => groupRecordsByTime(records, new Date()),
+    [records]
+  );
 
   const fetchRecords = () => {
     setLoading(true);
@@ -144,8 +150,13 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
 
   return (
     <div className="flex flex-col">
-      {records.map((record) => (
-        <div key={record.id} className="relative group">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <div className="px-3 pt-3 pb-1.5 text-xs font-semibold text-zinc-400 tracking-wide">
+            {group.label}
+          </div>
+          {group.records.map((record) => (
+            <div key={record.id} className="relative group">
           <button
             onClick={() => editingId !== record.id && onSelect(record)}
             className={`w-full text-left px-3 py-3 border-b border-white/5 transition-all duration-150 hover:bg-white/5 ${
@@ -255,6 +266,8 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
               </button>
             </div>
           )}
+        </div>
+          ))}
         </div>
       ))}
 

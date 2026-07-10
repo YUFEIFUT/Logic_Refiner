@@ -72,10 +72,12 @@ export function saveDb(db: SqlJsDatabase): void {
 }
 
 export function saveRefinement(db: SqlJsDatabase, data: RefinementInput): number {
+  const now = new Date();
+  const localIso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString();
   db.run(
-    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles)
-     VALUES (?, ?, ?, ?, ?)`,
-    [data.input, data.finalLogic, data.explanation, JSON.stringify(data.stages), data.cycles]
+    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [data.input, data.finalLogic, data.explanation, JSON.stringify(data.stages), data.cycles, localIso]
   );
 
   const result = db.exec('SELECT last_insert_rowid()');
@@ -85,10 +87,12 @@ export function saveRefinement(db: SqlJsDatabase, data: RefinementInput): number
 }
 
 export function createRefinement(db: SqlJsDatabase, input: string, cycles: number): number {
+  const now = new Date();
+  const localIso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString();
   db.run(
-    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles)
-     VALUES (?, '', NULL, '[]', ?)`,
-    [input, cycles]
+    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles, created_at)
+     VALUES (?, '', NULL, '[]', ?, ?)`,
+    [input, cycles, localIso]
   );
 
   const result = db.exec('SELECT last_insert_rowid()');
