@@ -42,7 +42,7 @@ export default function Sidebar({ isOpen, onToggle, onNewChat, children }: Sideb
       <aside
         role="complementary"
         className={cn(
-          "fixed left-0 top-0 h-full bg-zinc-900/30 md:bg-zinc-900 border-r border-white/10 z-40 transition-transform duration-200 ease-in-out backdrop-blur-sm md:backdrop-blur-none",
+          "fixed left-0 top-0 h-full bg-black border-r border-white/10 z-40 transition-transform duration-200 ease-in-out",
           "w-[85vw] max-w-[320px] md:w-[260px] md:max-w-none",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
