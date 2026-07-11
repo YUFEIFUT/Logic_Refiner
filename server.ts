@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement, updateRefinementInput } from "./src/db";
+import { getAuthContext } from "./src/utils/auth";
 import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
@@ -153,10 +154,14 @@ async function generateWithThinking(prompt: string, systemInstruction: string, r
 }
 
 app.get("/api/refine", async (req, res) => {
-  const { input: inputQuery, cycles: cyclesQuery, id: idQuery } = req.query;
+  const { input: inputQuery, cycles: cyclesQuery, id: idQuery, session_id: sessionIdQuery, admin_token: adminTokenQuery } = req.query;
   const input = inputQuery as string;
   const cycles = parseInt(cyclesQuery as string) || 1;
   const recordId = idQuery ? parseInt(idQuery as string) : null;
+  const adminToken = process.env.ADMIN_TOKEN;
+  const isAdmin = !!adminToken && adminTokenQuery === adminToken;
+  const { sessionId: headerSessionId } = getAuthContext(req);
+  const sessionId = isAdmin ? headerSessionId : (sessionIdQuery as string || headerSessionId);
 
   console.log(`[GET /api/refine] Starting refinement: input="${input}", cycles=${cycles}, recordId=${recordId}`);
 
@@ -319,7 +324,7 @@ app.get("/api/refine", async (req, res) => {
         finalLogic,
         explanation,
         stages: collectedStages,
-      });
+      }, isAdmin ? undefined : sessionId);
       sendEvent({ refinementId: recordId });
     } else {
       // Fallback: create new record (for backward compatibility)
@@ -330,7 +335,7 @@ app.get("/api/refine", async (req, res) => {
         explanation,
         stages: collectedStages,
         cycles,
-      });
+      }, sessionId);
       console.log(`[GET /api/refine] Created new record with id=${refinementId}`);
       sendEvent({ refinementId });
     }
@@ -356,8 +361,9 @@ app.get("/api/refine", async (req, res) => {
 
 // API: Get refinement history
 app.get("/api/refinements", (req, res) => {
-  // const limit = parseInt(req.query.limit as string) || 20;
-  const refinements = getRefinements(db);
+  const { isAdmin, sessionId } = getAuthContext(req);
+  const filterSessionId = isAdmin ? undefined : sessionId;
+  const refinements = getRefinements(db, filterSessionId);
   res.json(refinements);
 });
 
@@ -367,7 +373,9 @@ app.get("/api/refinements/:id", (req, res) => {
   if (isNaN(id)) {
     return res.status(400).json({ error: "Invalid id" });
   }
-  const refinement = getRefinementById(db, id);
+  const { isAdmin, sessionId } = getAuthContext(req);
+  const filterSessionId = isAdmin ? undefined : sessionId;
+  const refinement = getRefinementById(db, id, filterSessionId);
   if (!refinement) {
     return res.status(404).json({ error: "Not found" });
   }
@@ -380,9 +388,13 @@ app.post("/api/refinements", (req, res) => {
   if (!input || typeof input !== 'string') {
     return res.status(400).json({ error: "Missing or invalid input" });
   }
+  const { isAdmin, sessionId } = getAuthContext(req);
+  if (!isAdmin && !sessionId) {
+    return res.status(400).json({ error: "Missing session id" });
+  }
   const cyclesNum = parseInt(cycles) || 1;
   console.log(`[POST /api/refinements] Creating new record: input="${input}", cycles=${cyclesNum}`);
-  const id = createRefinement(db, input, cyclesNum);
+  const id = createRefinement(db, input, cyclesNum, sessionId);
   console.log(`[POST /api/refinements] Created record with id=${id}`);
   res.json({ id });
 });
@@ -393,8 +405,10 @@ app.put("/api/refinements/:id", (req, res) => {
   if (isNaN(id)) {
     return res.status(400).json({ error: "Invalid id" });
   }
+  const { isAdmin, sessionId } = getAuthContext(req);
+  const filterSessionId = isAdmin ? undefined : sessionId;
   const { finalLogic, explanation, stages } = req.body;
-  const updated = updateRefinement(db, id, { finalLogic, explanation, stages });
+  const updated = updateRefinement(db, id, { finalLogic, explanation, stages }, filterSessionId);
   if (!updated) {
     return res.status(404).json({ error: "Not found" });
   }
@@ -411,7 +425,9 @@ app.put("/api/refinements/:id/input", (req, res) => {
   if (typeof input !== 'string' || !input.trim()) {
     return res.status(400).json({ error: "Missing or invalid input" });
   }
-  const updated = updateRefinementInput(db, id, input.trim());
+  const { isAdmin, sessionId } = getAuthContext(req);
+  const filterSessionId = isAdmin ? undefined : sessionId;
+  const updated = updateRefinementInput(db, id, input.trim(), filterSessionId);
   if (!updated) {
     return res.status(404).json({ error: "Not found" });
   }
@@ -424,11 +440,21 @@ app.delete("/api/refinements/:id", (req, res) => {
   if (isNaN(id)) {
     return res.status(400).json({ error: "Invalid id" });
   }
-  const deleted = deleteRefinement(db, id);
+  const { isAdmin, sessionId } = getAuthContext(req);
+  const filterSessionId = isAdmin ? undefined : sessionId;
+  const deleted = deleteRefinement(db, id, filterSessionId);
   if (!deleted) {
     return res.status(404).json({ error: "Not found" });
   }
   res.json({ success: true });
+});
+
+// API: Verify admin token
+app.post("/api/admin/verify", (req, res) => {
+  const { token } = req.body;
+  const adminToken = process.env.ADMIN_TOKEN;
+  const valid = !!adminToken && token === adminToken;
+  res.json({ valid });
 });
 
 async function startServer() {

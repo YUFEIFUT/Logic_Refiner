@@ -11,6 +11,7 @@ const mockHistory = [
     explanation: '解读内容',
     stages: '[]',
     cycles: 2,
+    session_id: 'test-session',
     created_at: '2024-01-01T00:00:00.000Z',
   },
 ];

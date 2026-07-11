@@ -17,6 +17,7 @@ function makeRecord(id: number, daysAgo: number): HistoryRecord {
     explanation: null,
     stages: '[]',
     cycles: 1,
+    session_id: null,
     created_at: date.toISOString(),
   };
 }
@@ -29,6 +30,7 @@ function makeRecordOfMonth(id: number, year: number, month: number): HistoryReco
     explanation: null,
     stages: '[]',
     cycles: 1,
+    session_id: null,
     created_at: `${year}-${String(month).padStart(2, '0')}-15T12:00:00.000Z`,
   };
 }

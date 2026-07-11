@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { History, Trash2, MoreHorizontal, Pencil, Check, X } from 'lucide-react';
 import Toast from './Toast';
 import { groupRecordsByTime } from '../utils/historyGrouping';
+import { apiFetch } from '../utils/api';
 
 export interface HistoryRecord {
   id: number;
@@ -10,6 +11,7 @@ export interface HistoryRecord {
   explanation: string | null;
   stages: string;
   cycles: number;
+  session_id: string | null;
   created_at: string;
 }
 
@@ -43,7 +45,7 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
 
   const fetchRecords = () => {
     setLoading(true);
-    fetch('/api/refinements')
+    apiFetch('/api/refinements')
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -87,7 +89,7 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
     const trimmed = editingValue.trim();
     if (!trimmed) return;
     try {
-      const res = await fetch(`/api/refinements/${id}/input`, {
+      const res = await apiFetch(`/api/refinements/${id}/input`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: trimmed }),
@@ -96,7 +98,7 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
       setEditingId(null);
       setToast({ message: '重命名成功', type: 'success' });
       // Re-fetch and sync parent if this record is selected
-      const listRes = await fetch('/api/refinements');
+      const listRes = await apiFetch('/api/refinements');
       if (listRes.ok) {
         const data = await listRes.json();
         setRecords(data);
@@ -118,7 +120,7 @@ export default function HistoryList({ onSelect, selectedId, refreshKey, onRefres
 
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`/api/refinements/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/refinements/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDeleteConfirmId(null);
       fetchRecords();

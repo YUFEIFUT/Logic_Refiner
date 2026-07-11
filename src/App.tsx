@@ -16,7 +16,9 @@ import {
   Terminal,
   ChevronRight,
   Copy,
-  Check
+  Check,
+  Lock,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
@@ -27,6 +29,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import Sidebar from "./components/Sidebar";
 import HistoryList, { type HistoryRecord } from "./components/HistoryList";
+import { apiFetch, getSessionId, getAdminToken, setAdminToken, clearAdminToken, isAdminMode } from "./utils/api";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -59,6 +62,10 @@ export default function App() {
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [adminMode, setAdminMode] = useState(isAdminMode());
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -135,7 +142,7 @@ export default function App() {
 
     try {
       // Create empty record in database
-      const createRes = await fetch('/api/refinements', {
+      const createRes = await apiFetch('/api/refinements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input, cycles }),
@@ -146,7 +153,15 @@ export default function App() {
         setHistoryRefreshKey(prev => prev + 1);
       }
 
-      const eventSource = new EventSource(`/api/refine?input=${encodeURIComponent(input)}&cycles=${cycles}${currentRecordId ? `&id=${currentRecordId}` : ''}`);
+      const sessionId = getSessionId();
+      const adminToken = getAdminToken();
+      const sseParams = new URLSearchParams({
+        input,
+        cycles: String(cycles),
+        session_id: sessionId,
+      });
+      if (currentRecordId) sseParams.set('id', String(currentRecordId));
+      const eventSource = new EventSource(`/api/refine?${sseParams.toString()}${adminToken ? `&admin_token=${encodeURIComponent(adminToken)}` : ''}`);
 
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -162,7 +177,7 @@ export default function App() {
             eventSource.close();
             // Delete incomplete record on error
             if (currentRecordId) {
-              fetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
+              apiFetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
               setHistoryRefreshKey(prev => prev + 1);
             }
             return;
@@ -222,7 +237,7 @@ export default function App() {
         setIsLoading(false);
         // Delete incomplete record on error
         if (currentRecordId) {
-          fetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
+          apiFetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
           setHistoryRefreshKey(prev => prev + 1);
         }
       };
@@ -243,6 +258,38 @@ export default function App() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  // 管理员登录
+  const handleAdminLogin = async () => {
+    try {
+      const res = await apiFetch('/api/admin/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: adminPassword }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setAdminToken(adminPassword);
+        setAdminMode(true);
+        setShowAdminModal(false);
+        setAdminPassword("");
+        setAdminError(null);
+        setHistoryRefreshKey(prev => prev + 1);
+      } else {
+        setAdminError("密码错误");
+      }
+    } catch (err) {
+      setAdminError("验证失败，请重试");
+    }
+  };
+
+  // 退出管理员模式
+  const handleAdminLogout = () => {
+    clearAdminToken();
+    setAdminMode(false);
+    setShowAdminModal(false);
+    setHistoryRefreshKey(prev => prev + 1);
+  };
 
   // Dynamic configuration for stages
   const getStageConfig = (name: string) => {
@@ -300,7 +347,7 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
           >
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter uppercase mb-1">
-              LogicRefiner <span className="text-[10px] font-normal align-top opacity-50 font-mono tracking-normal">v1.2.5</span>
+              LogicRefiner <button onClick={() => { setShowAdminModal(true); setAdminError(null); setAdminPassword(""); }} className="text-[10px] font-normal align-top opacity-50 font-mono tracking-normal hover:opacity-100 transition-opacity cursor-pointer">v1.2.5</button>
             </h1>
             <p className="text-[10px] opacity-60 uppercase tracking-[0.2em]">认知自动机 // 递归演化引擎</p>
           </motion.div>
@@ -310,7 +357,7 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             className="text-right hidden md:block"
           >
-            <div className="text-[10px] opacity-40 uppercase mb-1">系统状态</div>
+            <div className="text-[10px] opacity-40 uppercase mb-1">系统状态{adminMode && <span className="text-white font-bold">(ADMIN)</span>}</div>
             <div className="flex items-center gap-2 text-xs font-bold text-green-400">
               <span className="animate-pulse">●</span> 循环递归模块就绪
             </div>
@@ -632,6 +679,75 @@ export default function App() {
            ))}
         </div>
       </footer>
+
+      {/* 管理员模态框 */}
+      <AnimatePresence>
+        {showAdminModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+            onClick={() => setShowAdminModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-zinc-950 border border-white/20 rounded-lg p-6 w-80 font-mono"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-white">
+                  <Lock className="w-3.5 h-3.5" />
+                  {adminMode ? "管理员模式" : "管理员登录"}
+                </div>
+                <button
+                  onClick={() => setShowAdminModal(false)}
+                  className="text-zinc-500 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {adminMode ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    当前处于管理员模式，可查看和管理全部数据。
+                  </p>
+                  <button
+                    onClick={handleAdminLogout}
+                    className="w-full px-3 py-2 text-xs uppercase tracking-widest border border-white/20 text-white hover:bg-white hover:text-black transition-colors"
+                  >
+                    退出管理员模式
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    type="password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
+                    placeholder="输入管理员密码"
+                    autoFocus
+                    className="w-full px-3 py-2 bg-black border border-white/20 text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-colors"
+                  />
+                  {adminError && (
+                    <p className="text-xs text-red-400">{adminError}</p>
+                  )}
+                  <button
+                    onClick={handleAdminLogin}
+                    className="w-full px-3 py-2 text-xs uppercase tracking-widest border border-white/20 text-white hover:bg-white hover:text-black transition-colors"
+                  >
+                    确认
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

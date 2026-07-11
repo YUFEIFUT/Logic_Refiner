@@ -17,6 +17,7 @@ export interface RefinementRecord {
   explanation: string | null;
   stages: string;
   cycles: number;
+  session_id: string | null;
   created_at: string;
 }
 
@@ -61,6 +62,16 @@ export async function initDb(filePath: string = 'refinements.db'): Promise<SqlJs
     )
   `);
 
+  // 迁移：检查是否已有 session_id 列，没有则添加
+  const tableInfo = db.exec('PRAGMA table_info(refinements)');
+  if (tableInfo.length > 0) {
+    const columns = tableInfo[0].values.map(row => row[1] as string);
+    if (!columns.includes('session_id')) {
+      db.run('ALTER TABLE refinements ADD COLUMN session_id TEXT');
+      db.run("UPDATE refinements SET session_id = 'legacy' WHERE session_id IS NULL");
+    }
+  }
+
   return db;
 }
 
@@ -71,13 +82,13 @@ export function saveDb(db: SqlJsDatabase): void {
   fs.writeFileSync(dbPath, buffer);
 }
 
-export function saveRefinement(db: SqlJsDatabase, data: RefinementInput): number {
+export function saveRefinement(db: SqlJsDatabase, data: RefinementInput, sessionId?: string): number {
   const now = new Date();
   const localIso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString();
   db.run(
-    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [data.input, data.finalLogic, data.explanation, JSON.stringify(data.stages), data.cycles, localIso]
+    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles, session_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [data.input, data.finalLogic, data.explanation, JSON.stringify(data.stages), data.cycles, sessionId ?? null, localIso]
   );
 
   const result = db.exec('SELECT last_insert_rowid()');
@@ -86,13 +97,13 @@ export function saveRefinement(db: SqlJsDatabase, data: RefinementInput): number
   return id;
 }
 
-export function createRefinement(db: SqlJsDatabase, input: string, cycles: number): number {
+export function createRefinement(db: SqlJsDatabase, input: string, cycles: number, sessionId?: string): number {
   const now = new Date();
   const localIso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString();
   db.run(
-    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles, created_at)
-     VALUES (?, '', NULL, '[]', ?, ?)`,
-    [input, cycles, localIso]
+    `INSERT INTO refinements (input, final_logic, explanation, stages, cycles, session_id, created_at)
+     VALUES (?, '', NULL, '[]', ?, ?, ?)`,
+    [input, cycles, sessionId ?? null, localIso]
   );
 
   const result = db.exec('SELECT last_insert_rowid()');
@@ -104,38 +115,56 @@ export function createRefinement(db: SqlJsDatabase, input: string, cycles: numbe
 export function updateRefinement(
   db: SqlJsDatabase,
   id: number,
-  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string }[] }
+  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string }[] },
+  sessionId?: string
 ): boolean {
-  const record = getRefinementById(db, id);
+  const record = getRefinementById(db, id, sessionId);
   if (!record) return false;
 
   const finalLogic = data.finalLogic ?? record.finalLogic;
   const explanation = data.explanation !== undefined ? data.explanation : record.explanation;
   const stages = data.stages ? JSON.stringify(data.stages) : record.stages;
 
-  db.run(
-    `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ? WHERE id = ?`,
-    [finalLogic, explanation, stages, id]
-  );
+  if (sessionId !== undefined) {
+    db.run(
+      `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ? WHERE id = ? AND session_id = ?`,
+      [finalLogic, explanation, stages, id, sessionId]
+    );
+  } else {
+    db.run(
+      `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ? WHERE id = ?`,
+      [finalLogic, explanation, stages, id]
+    );
+  }
   saveDb(db);
   return true;
 }
 
-export function updateRefinementInput(db: SqlJsDatabase, id: number, input: string): boolean {
-  const record = getRefinementById(db, id);
+export function updateRefinementInput(db: SqlJsDatabase, id: number, input: string, sessionId?: string): boolean {
+  const record = getRefinementById(db, id, sessionId);
   if (!record) return false;
 
-  db.run(`UPDATE refinements SET input = ? WHERE id = ?`, [input, id]);
+  if (sessionId !== undefined) {
+    db.run(`UPDATE refinements SET input = ? WHERE id = ? AND session_id = ?`, [input, id, sessionId]);
+  } else {
+    db.run(`UPDATE refinements SET input = ? WHERE id = ?`, [input, id]);
+  }
   saveDb(db);
   return true;
 }
 
-export function getRefinements(db: SqlJsDatabase): RefinementRecord[] {
-  const results = db.exec(
-    `SELECT id, input, final_logic, explanation, stages, cycles, created_at
-     FROM refinements
-     ORDER BY id DESC`
-  );
+export function getRefinements(db: SqlJsDatabase, sessionId?: string): RefinementRecord[] {
+  let sql = `SELECT id, input, final_logic, explanation, stages, cycles, session_id, created_at FROM refinements`;
+  const params: any[] = [];
+
+  if (sessionId !== undefined) {
+    sql += ` WHERE session_id = ?`;
+    params.push(sessionId);
+  }
+
+  sql += ` ORDER BY id DESC`;
+
+  const results = db.exec(sql, params);
 
   if (results.length === 0) return [];
 
@@ -143,21 +172,28 @@ export function getRefinements(db: SqlJsDatabase): RefinementRecord[] {
   return values.map((row) => mapRowToRecord(columns, row));
 }
 
-export function getRefinementById(db: SqlJsDatabase, id: number): RefinementRecord | null {
-  const results = db.exec(
-    `SELECT id, input, final_logic, explanation, stages, cycles, created_at
-     FROM refinements
-     WHERE id = ?`,
-    [id]
-  );
+export function getRefinementById(db: SqlJsDatabase, id: number, sessionId?: string): RefinementRecord | null {
+  let sql = `SELECT id, input, final_logic, explanation, stages, cycles, session_id, created_at FROM refinements WHERE id = ?`;
+  const params: any[] = [id];
+
+  if (sessionId !== undefined) {
+    sql += ` AND session_id = ?`;
+    params.push(sessionId);
+  }
+
+  const results = db.exec(sql, params);
 
   if (results.length === 0 || results[0].values.length === 0) return null;
 
   return mapRowToRecord(results[0].columns, results[0].values[0]);
 }
 
-export function deleteRefinement(db: SqlJsDatabase, id: number): boolean {
-  db.run('DELETE FROM refinements WHERE id = ?', [id]);
+export function deleteRefinement(db: SqlJsDatabase, id: number, sessionId?: string): boolean {
+  if (sessionId !== undefined) {
+    db.run('DELETE FROM refinements WHERE id = ? AND session_id = ?', [id, sessionId]);
+  } else {
+    db.run('DELETE FROM refinements WHERE id = ?', [id]);
+  }
   const changes = db.exec('SELECT changes()');
   const deleted = changes[0]?.values[0][0] as number > 0;
   if (deleted) saveDb(db);
