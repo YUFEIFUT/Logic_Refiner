@@ -18,7 +18,9 @@ import {
   Copy,
   Check,
   Lock,
-  X
+  X,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
@@ -66,6 +68,9 @@ export default function App() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const versionClickCountRef = useRef(0);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -259,6 +264,36 @@ export default function App() {
     window.scrollTo(0, 0);
   }, []);
 
+  // 版本号点击处理：普通模式连续点击5次触发，管理员模式点击1次直接弹出
+  const handleVersionClick = () => {
+    if (adminMode) {
+      setShowAdminModal(true);
+      setAdminError(null);
+      setAdminPassword("");
+      return;
+    }
+
+    versionClickCountRef.current += 1;
+
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+    clickTimerRef.current = setTimeout(() => {
+      versionClickCountRef.current = 0;
+    }, 2000);
+
+    if (versionClickCountRef.current >= 5) {
+      setShowAdminModal(true);
+      setAdminError(null);
+      setAdminPassword("");
+      versionClickCountRef.current = 0;
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
+    }
+  };
+
   // 管理员登录
   const handleAdminLogin = async () => {
     try {
@@ -274,6 +309,7 @@ export default function App() {
         setShowAdminModal(false);
         setAdminPassword("");
         setAdminError(null);
+        setShowPassword(false);
         setHistoryRefreshKey(prev => prev + 1);
       } else {
         setAdminError("密码错误");
@@ -288,6 +324,7 @@ export default function App() {
     clearAdminToken();
     setAdminMode(false);
     setShowAdminModal(false);
+    setShowPassword(false);
     setHistoryRefreshKey(prev => prev + 1);
   };
 
@@ -347,7 +384,7 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
           >
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter uppercase mb-1">
-              LogicRefiner <button onClick={() => { setShowAdminModal(true); setAdminError(null); setAdminPassword(""); }} className="text-[10px] font-normal align-top opacity-50 font-mono tracking-normal hover:opacity-100 transition-opacity cursor-pointer">v1.2.5</button>
+              LogicRefiner <button onClick={handleVersionClick} className="text-[10px] font-normal align-top opacity-50 font-mono tracking-normal hover:opacity-100 transition-opacity cursor-pointer">v1.2.5</button>
             </h1>
             <p className="text-[10px] opacity-60 uppercase tracking-[0.2em]">认知自动机 // 递归演化引擎</p>
           </motion.div>
@@ -724,15 +761,25 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <input
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
-                    placeholder="输入管理员密码"
-                    autoFocus
-                    className="w-full px-3 py-2 bg-black border border-white/20 text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-colors"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
+                      placeholder="输入管理员密码"
+                      autoFocus
+                      className="w-full px-3 py-2 pr-9 bg-black border border-white/20 text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      aria-label="切换密码可见"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                   {adminError && (
                     <p className="text-xs text-red-400">{adminError}</p>
                   )}
