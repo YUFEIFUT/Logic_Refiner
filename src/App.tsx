@@ -374,11 +374,14 @@ export default function App() {
       <main
         className="relative max-w-[1200px] mx-auto px-6 py-12 transition-[margin-left] duration-200"
         style={{
-          marginLeft: sidebarOpen ? '20vw' : '0px',
+          marginLeft: sidebarOpen ? '260px' : '0px',
         }}
       >
         {/* Header - Artistic Flair style */}
-        <header className="flex flex-col md:flex-row justify-between items-end border-b border-white/30 pb-4 mb-12">
+        <header className={cn(
+          "flex flex-col md:flex-row justify-between items-end border-b border-white/30 pb-4 mb-12 transition-all",
+          !sidebarOpen && "pl-12 md:pl-0"
+        )}>
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}

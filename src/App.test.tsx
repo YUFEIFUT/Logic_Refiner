@@ -30,7 +30,7 @@ describe('App', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText('LogicRefiner')).toBeInTheDocument();
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
       expect(screen.getByText('等待信号输入')).toBeInTheDocument();
     });
   });
@@ -39,7 +39,7 @@ describe('App', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle sidebar')).toBeInTheDocument();
+      expect(screen.getByLabelText('展开侧边栏')).toBeInTheDocument();
     });
   });
 });
@@ -61,7 +61,7 @@ describe('Admin entry - version click', () => {
   it('should not show admin modal on single click in visitor mode', async () => {
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText('LogicRefiner')).toBeInTheDocument();
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
     });
 
     const versionButton = screen.getByText('v1.2.5');
@@ -73,7 +73,7 @@ describe('Admin entry - version click', () => {
   it('should show admin modal after 5 consecutive clicks in visitor mode', async () => {
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText('LogicRefiner')).toBeInTheDocument();
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
     });
 
     const versionButton = screen.getByText('v1.2.5');
@@ -119,7 +119,7 @@ describe('Admin entry - version click', () => {
 
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText('LogicRefiner')).toBeInTheDocument();
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
     });
 
     const versionButton = screen.getByText('v1.2.5');
@@ -144,7 +144,7 @@ describe('Admin password visibility toggle', () => {
   it('should default password input to hidden', async () => {
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText('LogicRefiner')).toBeInTheDocument();
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
     });
 
     // Click version 5 times to open admin modal
@@ -166,7 +166,7 @@ describe('Admin password visibility toggle', () => {
 
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText('LogicRefiner')).toBeInTheDocument();
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
     });
 
     // Click version 5 times to open admin modal
