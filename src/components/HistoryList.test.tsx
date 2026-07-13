@@ -25,7 +25,7 @@ describe('HistoryList Delete Feature', () => {
     });
   });
 
-  it('should show delete button on hover', async () => {
+  it('should show more actions button on hover', async () => {
     const user = userEvent.setup();
     render(<HistoryList onSelect={() => {}} />);
 
@@ -36,7 +36,7 @@ describe('HistoryList Delete Feature', () => {
     const recordItem = screen.getByText('努力就会成功').closest('button')!;
     await user.hover(recordItem);
 
-    expect(screen.getByLabelText('删除记录')).toBeInTheDocument();
+    expect(screen.getByLabelText('更多操作')).toBeInTheDocument();
   });
 
   it('should show confirmation dialog when delete is clicked', async () => {
@@ -49,7 +49,8 @@ describe('HistoryList Delete Feature', () => {
 
     const recordItem = screen.getByText('努力就会成功').closest('button')!;
     await user.hover(recordItem);
-    await user.click(screen.getByLabelText('删除记录'));
+    await user.click(screen.getByLabelText('更多操作'));
+    await user.click(screen.getByText('删除'));
 
     expect(screen.getByText('删除历史记录')).toBeInTheDocument();
     expect(screen.getByText('取消')).toBeInTheDocument();
@@ -65,7 +66,8 @@ describe('HistoryList Delete Feature', () => {
 
     const recordItem = screen.getByText('努力就会成功').closest('button')!;
     await user.hover(recordItem);
-    await user.click(screen.getByLabelText('删除记录'));
+    await user.click(screen.getByLabelText('更多操作'));
+    await user.click(screen.getByText('删除'));
     await user.click(screen.getByText('取消'));
 
     expect(screen.queryByText('删除历史记录')).not.toBeInTheDocument();
@@ -95,7 +97,8 @@ describe('HistoryList Delete Feature', () => {
 
     const recordItem = screen.getByText('努力就会成功').closest('button')!;
     await user.hover(recordItem);
-    await user.click(screen.getByLabelText('删除记录'));
+    await user.click(screen.getByLabelText('更多操作'));
+    await user.click(screen.getByText('删除'));
     await user.click(screen.getByText('删除'));
 
     await waitFor(() => {
