@@ -16,6 +16,6 @@
 
 1. Install dependencies:
    `npm install`
-2. Copy `.env.example` to `.env` and fill in your `MIMO_API_KEY`
+2. Copy `.env.example` to `.env` and fill in your `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` (see `.env.example` for reference values of each provider)
 3. Run the app:
    `npm run dev`
