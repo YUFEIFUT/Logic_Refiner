@@ -372,10 +372,10 @@ export default function App() {
       </Sidebar>
 
       <main
-        className="relative max-w-[1200px] mx-auto px-6 py-12 transition-[margin-left] duration-200"
-        style={{
-          marginLeft: sidebarOpen ? '260px' : '0px',
-        }}
+        className={cn(
+          "relative px-6 py-12 transition-[margin-left,width] duration-200",
+          sidebarOpen ? "md:ml-[260px] md:w-[calc(100%-260px)]" : "w-full"
+        )}
       >
         {/* Header - Artistic Flair style */}
         <header className={cn(
@@ -700,7 +700,12 @@ export default function App() {
       </main>
 
       {/* Interface Footer Bar */}
-      <footer className="mt-12 max-w-[1200px] mx-auto px-6 py-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6">
+      <footer
+        className={cn(
+          "mt-12 px-6 py-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6 transition-[margin-left,width] duration-200",
+          sidebarOpen ? "md:ml-[260px] md:w-[calc(100%-260px)]" : "w-full"
+        )}
+      >
         <div className="flex items-center gap-6">
           <div className="text-[9px] uppercase tracking-widest opacity-40 leading-tight">
             注：所有真理结论均为<br/>基于当前数据的贝叶斯最大似然估计。
