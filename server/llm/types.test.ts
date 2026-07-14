@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { loadProviderConfig } from './types';
+import { PROVIDERS } from './registry';
+import type { GenerateOptions } from './types';
 
 describe('loadProviderConfig', () => {
   // 测试 0.1：缺少 LLM_PROVIDER 抛错
@@ -50,6 +52,7 @@ describe('loadProviderConfig', () => {
     });
     expect(config.temperature).toBe(0.8);
     expect(config.maxTokens).toBeUndefined();
+    expect(config.reasoningDefault).toBeUndefined();
   });
 
   // 测试 0.5：读取 LLM_TEMPERATURE（字符串转数字）
@@ -74,5 +77,87 @@ describe('loadProviderConfig', () => {
       LLM_MAX_TOKENS: '4096',
     });
     expect(config.maxTokens).toBe(4096);
+  });
+});
+
+describe('PROVIDERS registry', () => {
+  // T0.1：7 个 provider 键齐全
+  it('T0.1 should contain all 7 providers', () => {
+    const keys = Object.keys(PROVIDERS);
+    expect(keys).toEqual(
+      expect.arrayContaining(['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral'])
+    );
+    expect(keys).toHaveLength(7);
+  });
+
+  // T0.2：MiMo toggle 声明
+  it('T0.2 mimo reasoning is toggle with enabled/disabled', () => {
+    const r = PROVIDERS.mimo.reasoning?.request;
+    expect(r?.kind).toBe('toggle');
+    expect(r?.field).toBe('thinking');
+    expect(r?.on).toEqual({ type: 'enabled' });
+    expect(r?.off).toEqual({ type: 'disabled' });
+  });
+
+  // T0.3：Mistral effort 声明（mistral-medium-3-5 仅支持 high/none）
+  it('T0.3 mistral reasoning is effort with levels [none,high] and default high', () => {
+    const r = PROVIDERS.mistral.reasoning?.request;
+    expect(r?.kind).toBe('effort');
+    expect(r?.field).toBe('reasoning_effort');
+    expect(r?.levels).toEqual(['none', 'high']);
+    expect(r?.default).toBe('high');
+  });
+
+  // T0.4：响应侧 format
+  it('T0.4 response format: mistral=chunk-array, mimo=string', () => {
+    expect(PROVIDERS.mistral.reasoning?.response.format).toBe('chunk-array');
+    expect(PROVIDERS.mimo.reasoning?.response.format).toBe('string');
+  });
+
+  // T0.5：openai 不声明 reasoning
+  it('T0.5 openai has no reasoning capability', () => {
+    expect(PROVIDERS.openai.reasoning).toBeUndefined();
+  });
+
+  // T0.6：GenerateOptions.reasoning 类型允许 boolean 与档位字符串
+  it('T0.6 GenerateOptions.reasoning accepts boolean and level string', () => {
+    const a: GenerateOptions = { reasoning: true };
+    const b: GenerateOptions = { reasoning: false };
+    const c: GenerateOptions = { reasoning: 'medium' };
+    const d: GenerateOptions = { reasoning: 'none' };
+    const e: GenerateOptions = {};
+    expect(a.reasoning).toBe(true);
+    expect(b.reasoning).toBe(false);
+    expect(c.reasoning).toBe('medium');
+    expect(d.reasoning).toBe('none');
+    expect(e.reasoning).toBeUndefined();
+  });
+
+  // T0.7：maxTokensField
+  it('T0.7 maxTokensField: mistral=max_tokens, mimo=undefined', () => {
+    expect(PROVIDERS.mistral.maxTokensField).toBe('max_tokens');
+    expect(PROVIDERS.mimo.maxTokensField).toBeUndefined();
+  });
+
+  // T0.8：loadProviderConfig 读 LLM_REASONING_DEFAULT
+  // 注：当前(C 未做)用全局 6 档常量校验，medium 能过启动校验；运行时 resolveReasoning 会回退到 high。
+  //    待 docs/issues 的 C 提议落地后，此处应改为按 provider 实际 levels 校验（medium 启动即报错）。
+  it('T0.8 loadProviderConfig reads LLM_REASONING_DEFAULT', () => {
+    const base = {
+      LLM_PROVIDER: 'mistral',
+      LLM_API_KEY: 'k',
+      LLM_BASE_URL: 'u',
+      LLM_MODEL: 'm',
+    };
+    // 合法值（pre-C：medium 仍被启动校验接受）
+    const ok = loadProviderConfig({ ...base, LLM_REASONING_DEFAULT: 'medium' });
+    expect(ok.reasoningDefault).toBe('medium');
+    // 非法值
+    expect(() => loadProviderConfig({ ...base, LLM_REASONING_DEFAULT: 'ultra' })).toThrow(
+      /LLM_REASONING_DEFAULT/
+    );
+    // 缺省
+    const none = loadProviderConfig({ ...base });
+    expect(none.reasoningDefault).toBeUndefined();
   });
 });
