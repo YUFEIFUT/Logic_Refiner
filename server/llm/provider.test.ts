@@ -36,6 +36,20 @@ const mistralSpec: ProviderSpec = {
 
 const openaiSpec: ProviderSpec = { auth: 'bearer' };
 
+const agnesSpec: ProviderSpec = {
+  auth: 'bearer',
+  maxTokensField: 'max_tokens',
+  reasoning: {
+    request: {
+      kind: 'toggle',
+      field: 'chat_template_kwargs',
+      on: { enable_thinking: true },
+      off: { enable_thinking: false },
+    },
+    response: { format: 'string' },
+  },
+};
+
 function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     provider: 'mimo',
@@ -262,5 +276,56 @@ describe('RegistryProvider', () => {
     const systemContent = (body.messages as Array<{ role: string; content: string }>)[0].content;
     expect(systemContent).toContain('LaTeX');
     expect(systemContent.startsWith('base system')).toBe(true);
+  });
+
+  // T3.14：Agnes + reasoning:true → body.chat_template_kwargs.enable_thinking true，Bearer 头
+  it('T3.14 agnes reasoning:true injects chat_template_kwargs.enable_thinking true, uses Bearer', async () => {
+    const p = new RegistryProvider(makeConfig({ apiKey: 'agnes-key' }), agnesSpec);
+    await p.generate('p', 's', { reasoning: true });
+    const body = getCallBody(fetchMock);
+    const headers = getCallHeaders(fetchMock);
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: true });
+    expect(headers['Authorization']).toBe('Bearer agnes-key');
+  });
+
+  // T3.15：Agnes + reasoning:false → body.chat_template_kwargs.enable_thinking false
+  it('T3.15 agnes reasoning:false injects enable_thinking false', async () => {
+    const p = new RegistryProvider(makeConfig({}), agnesSpec);
+    await p.generate('p', 's', { reasoning: false });
+    const body = getCallBody(fetchMock);
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+  });
+
+  // T3.16：Agnes 思考模式 + config 温度 0 → body.temperature 仍为 0（无温度约束，passthrough）
+  it('T3.16 agnes thinking mode does not constrain temperature', async () => {
+    const p = new RegistryProvider(makeConfig({ temperature: 0 }), agnesSpec);
+    await p.generate('p', 's', { reasoning: true });
+    const body = getCallBody(fetchMock);
+    expect(body.temperature).toBe(0);
+  });
+
+  // T3.17：Agnes 字符串响应 → generate 返回 content，忽略 reasoning_content（与 MiMo 同构）
+  it('T3.17 agnes string response returns content, ignores reasoning_content', async () => {
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: 'agnes answer', reasoning_content: 'hidden thinking' } }],
+      }),
+      text: () => Promise.resolve(''),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const p = new RegistryProvider(makeConfig({}), agnesSpec);
+    const result = await p.generate('p', 's', { reasoning: true });
+    expect(result).toBe('agnes answer');
+  });
+
+  // T3.18：Agnes maxTokens 字段名 = max_tokens
+  it('T3.18 agnes maxTokens field name is max_tokens', async () => {
+    const p = new RegistryProvider(makeConfig({ maxTokens: 4096 }), agnesSpec);
+    await p.generate('p', 's');
+    const body = getCallBody(fetchMock);
+    expect(body.max_tokens).toBe(4096);
+    expect(body.max_completion_tokens).toBeUndefined();
   });
 });

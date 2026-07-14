@@ -43,4 +43,20 @@ export const PROVIDERS: ProviderRegistry = {
       response: { format: "chunk-array" }, // 思考内容嵌在 content 数组，需抽 type:"text"
     },
   },
+  agnes: {
+    auth: "bearer",
+    // Agnes 2.0 Flash：OpenAI 兼容端点，使用 max_tokens 作为总输出上限（文档列出）
+    maxTokensField: "max_tokens",
+    reasoning: {
+      request: {
+        kind: "toggle",
+        // OpenAI 兼容思考开关：chat_template_kwargs.enable_thinking（实测 curl 确认）
+        field: "chat_template_kwargs",
+        on: { enable_thinking: true },
+        off: { enable_thinking: false },
+        // 实测：思考模式下 temperature:0 被正常接受 → 无温度约束（默认 passthrough）
+      },
+      response: { format: "string" }, // 思考在 message.reasoning_content，content 是答案（与 MiMo 同构）
+    },
+  },
 };
