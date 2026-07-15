@@ -10,3 +10,5 @@ coverage/
 .env.example
 .mimocode/*
 .trae/*
+.workbuddy/*
+.playwright-mcp/*

@@ -2,8 +2,9 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement, updateRefinementInput } from "./src/db";
-import { getAuthContext } from "./src/utils/auth";
+import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement, updateRefinementInput } from "../src/db";
+import { getAuthContext } from "../src/utils/auth";
+import { createProvider } from "./llm";
 import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
@@ -14,144 +15,8 @@ let db: SqlJsDatabase;
 
 app.use(express.json());
 
-// Initialize Xiaomi MiMo configuration
-const MIMO_API_KEY = process.env.MIMO_API_KEY;
-if (!MIMO_API_KEY) {
-  console.error("MIMO_API_KEY is not configured. Please set it in .env file.");
-  process.exit(1);
-}
-const MODEL_NAME = "mimo-v2.5-pro";
-const ENDPOINT = "https://api.xiaomimimo.com/v1/chat/completions";
-
-// Helper function with retry for API quota / transient errors
-async function generate(prompt: string, systemInstruction: string, retries = 5) {
-  const enhancedSystemInstruction = systemInstruction + 
-    "\n重要格式提示：当你输出任何必须的数学公式、定量变量或严密的逻辑代数式时，请使用标准的 LaTeX 语法。行内公式使用单个美元符号 $...$，块级/段落公式使用双美元符号 $$...$$。但请极力避免将非数量化的现实抽象概念生搬硬套进一个生硬造作的伪物理或数学公式中。";
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      // Add a small artificial delay to avoid hitting rate limits too fast
-      // await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const response = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: {
-          "api-key": MIMO_API_KEY,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: MODEL_NAME,
-          messages: [
-            {
-              role: "system",
-              content: enhancedSystemInstruction
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.8,
-          top_p: 0.95,
-          max_completion_tokens: 131072
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Xiaomi MiMo API Error (${response.status}): ${errorText}`);
-      }
-
-      const data: any = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (content === undefined || content === null) {
-        throw new Error("Invalid API response format: " + JSON.stringify(data));
-      }
-      return content;
-    } catch (error: any) {
-      console.error(`Attempt ${i + 1} failed:`, error.message);
-      const isQuotaError = error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED") || error.message?.toLowerCase().includes("quota") || error.message?.toLowerCase().includes("limit");
-      if (isQuotaError && i < retries - 1) {
-        const waitTime = 5000 + (i * 10000);
-        console.log(`Quota or rate limit hit (Attempt ${i + 1}), waiting ${waitTime}ms before retry...`);
-        // await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-      if (i === retries - 1) {
-        throw error;
-      }
-      // Wait a bit on normal error before retry
-      // await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-  }
-  throw new Error("Maximum retries reached for API generation.");
-}
-
-// Helper function with thinking (reasoning) enabled
-async function generateWithThinking(prompt: string, systemInstruction: string, retries = 5) {
-  const enhancedSystemInstruction = systemInstruction +
-    "\n重要格式提示：当你输出任何必须的数学公式、定量变量或严密的逻辑代数式时，请使用标准的 LaTeX 语法。行内公式使用单个美元符号 $...$，块级/段落公式使用双美元符号 $$...$$。但请极力避免将非数量化的现实抽象概念生搬硬套进一个生硬造作的伪物理或数学公式中。";
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: {
-          "api-key": MIMO_API_KEY,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: MODEL_NAME,
-          messages: [
-            {
-              role: "system",
-              content: enhancedSystemInstruction
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.8,
-          top_p: 0.95,
-          max_completion_tokens: 131072,
-          thinking: {
-            type: "enabled"
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Xiaomi MiMo API Error (${response.status}): ${errorText}`);
-      }
-
-      const data: any = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (content === undefined || content === null) {
-        throw new Error("Invalid API response format: " + JSON.stringify(data));
-      }
-      // Log reasoning content if present
-      const reasoningContent = data.choices?.[0]?.message?.reasoning_content;
-      if (reasoningContent) {
-        console.log(`[Thinking] reasoning_tokens=${data.usage?.completion_tokens_details?.reasoning_tokens ?? 'N/A'}`);
-      }
-      return content;
-    } catch (error: any) {
-      console.error(`Attempt ${i + 1} failed:`, error.message);
-      const isQuotaError = error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED") || error.message?.toLowerCase().includes("quota") || error.message?.toLowerCase().includes("limit");
-      if (isQuotaError && i < retries - 1) {
-        const waitTime = 5000 + (i * 10000);
-        console.log(`Quota or rate limit hit (Attempt ${i + 1}), waiting ${waitTime}ms before retry...`);
-        continue;
-      }
-      if (i === retries - 1) {
-        throw error;
-      }
-    }
-  }
-  throw new Error("Maximum retries reached for API generation.");
-}
+// 启动时创建 LLM provider 实例（若 LLM_PROVIDER / LLM_API_KEY 等必填项未配置，此处会抛错导致 server 启动失败）
+const llm = createProvider();
 
 app.get("/api/refine", async (req, res) => {
   const { input: inputQuery, cycles: cyclesQuery, id: idQuery, session_id: sessionIdQuery, admin_token: adminTokenQuery } = req.query;
@@ -197,7 +62,7 @@ app.get("/api/refine", async (req, res) => {
 
     输入： "${input}"`;
     const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。无论输入是问题还是命题，你都必须产出一个明确的逻辑立场作为后续精炼的起点。请使用中文。";
-    const architectOutput = await generateWithThinking(architectPrompt, architectSystem);
+    const architectOutput = await llm.generate(architectPrompt, architectSystem, { reasoning: true });
     sendEvent({ stage: "architect", content: architectOutput });
     collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architectOutput });
 
@@ -226,7 +91,7 @@ app.get("/api/refine", async (req, res) => {
       2. 在当前逻辑的讨论层级内有效（如逻辑在讨论认知现象，就不得用量子物理等不同层级的场景来反驳）
       3. 说明该反例具体击中了当前逻辑的哪个环节（前提、推理链条、隐含假设）`;
       const redTeamSystem = "你是 'The Red Team'。你是一个精准的逻辑批评者。你的任务是深入理解当前逻辑后，找出其在现实世界中无法闭环的关键弱点。你的反驳必须建立在对原逻辑的准确理解之上，攻击实际的逻辑缺陷，而非曲解后的稻草人。请使用中文。";
-      const redTeamOutput = await generateWithThinking(redTeamPrompt, redTeamSystem);
+      const redTeamOutput = await llm.generate(redTeamPrompt, redTeamSystem, { reasoning: true });
       sendEvent({ stage: "redteam", content: redTeamOutput, cycle: c });
       collectedStages.push({ name: "redteam", title: `红方压力测试 #${c} (Red Team)`, content: redTeamOutput });
 
@@ -255,7 +120,7 @@ app.get("/api/refine", async (req, res) => {
       5. 【证伪约束】新逻辑应比当前逻辑更难找到反例。如果无法做到，需明确说明当前逻辑已是最佳状态。
       6. 【简洁原则】尽可能简洁（奥卡姆剃刀原则），不要引入不必要的变量或条件，准确描述变量之间的因果关系，不多不少。`;
       const synthesizerSystem = "你是 'The Synthesizer'。你合成对抗性的意见并重塑更强壮的真理体系。请使用中文。";
-      const synthesizerOutput = await generateWithThinking(synthesizerPrompt, synthesizerSystem);
+      const synthesizerOutput = await llm.generate(synthesizerPrompt, synthesizerSystem, { reasoning: true });
       currentLogic = synthesizerOutput;
       lastRefinement = synthesizerOutput;
       sendEvent({ stage: "synthesizer", content: synthesizerOutput, cycle: c });
@@ -272,7 +137,7 @@ app.get("/api/refine", async (req, res) => {
     3. 提供一个关于此真理在现实世界中成立的概率或贝叶斯认知建议。
     4. 【核心约束】你的分析必须与原始观点"${input}"相关，明确说明精炼后的逻辑如何回应了原始观点。`;
     const boundarySystem = "你是 'The Boundary Definer'。你确定人类认知的边界。请使用中文。";
-    const boundaryOutput = await generateWithThinking(boundaryPrompt, boundarySystem);
+    const boundaryOutput = await llm.generate(boundaryPrompt, boundarySystem, { reasoning: true });
     sendEvent({ stage: "boundary", content: boundaryOutput });
     collectedStages.push({ name: "boundary", title: "边界判定 (Boundary Definer)", content: boundaryOutput });
 
@@ -303,7 +168,7 @@ app.get("/api/refine", async (req, res) => {
 
     仅输出这句精炼结论，绝不要带有任何前言、引言、多余说明。`;
     const crystallizationSystem = "你是 'The Crystallizer'。你负责产出经过证伪检验的、简洁的、难以反驳的逻辑表述。实事求是、准确描述因果关系，符合奥卡姆剃刀原则，具备系统性视角。请使用中文，直接给出结论，无需废话。";
-    const finalLogic = await generateWithThinking(crystallizationPrompt, crystallizationSystem);
+    const finalLogic = await llm.generate(crystallizationPrompt, crystallizationSystem, { reasoning: true });
     sendEvent({ stage: "finalLogic", content: finalLogic, actualCycles: cycles });
 
     // --- STEP 6: The Explainer ---
@@ -314,7 +179,7 @@ app.get("/api/refine", async (req, res) => {
     1. 用通俗、生动但绝不廉价的语言，解读该结论的核心含义与逻辑关系。
     2. 提供 2 个生活或工作中的实际对照/应用例子，帮助用户透彻理解这一结论。`;
     const explainerSystem = "你是 'The Explainer'。你用通俗易懂的方式解读经过证伪检验的逻辑表述，帮助用户理解结论背后的因果关系和实际应用。请使用中文。";
-    const explanation = await generateWithThinking(explainerPrompt, explainerSystem);
+    const explanation = await llm.generate(explainerPrompt, explainerSystem, { reasoning: true });
     sendEvent({ stage: "explanation", content: explanation });
 
     // Update or create refinement record in database
