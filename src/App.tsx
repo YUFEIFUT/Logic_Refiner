@@ -59,7 +59,6 @@ export default function App() {
   const [explanation, setExplanation] = useState<string | null>(null);
   const [actualCycles, setActualCycles] = useState(0);
   const [currentLog, setCurrentLog] = useState("");
-  const [history, setHistory] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -229,7 +228,6 @@ export default function App() {
         if (data.done) {
           eventSource.close();
           setIsLoading(false);
-          setHistory(prev => [input, ...prev.slice(0, 4)]);
           setCurrentLog("演化完成。");
           // Backend now handles database update via id parameter
           setHistoryRefreshKey(prev => prev + 1);
@@ -459,21 +457,6 @@ export default function App() {
               </div>
             </div>
           </form>
-          
-          {history.length > 0 && (
-            <div className="mt-6 flex items-center gap-3 overflow-x-auto pb-2">
-              <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter shrink-0">本次演化:</span>
-              {history.map((h, i) => (
-                <button
-                  key={i}
-                  onClick={() => { setInput(h); handleRefine(); }}
-                  className="whitespace-nowrap px-3 py-1 border border-white/10 text-[9px] text-zinc-500 hover:text-white hover:border-white/30 transition-colors uppercase tracking-wider"
-                >
-                  {h}
-                </button>
-              ))}
-            </div>
-          )}
         </section>
 
         {/* Error State */}
