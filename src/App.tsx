@@ -60,6 +60,8 @@ export default function App() {
   const [actualCycles, setActualCycles] = useState(0);
   const [currentLog, setCurrentLog] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [currentRecordId, setCurrentRecordId] = useState<number | null>(null);
+  const [resumeCycles, setResumeCycles] = useState(2);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
@@ -93,10 +95,12 @@ export default function App() {
       setResult(null);
       setExplanation(null);
       setActualCycles(0);
+      setCurrentRecordId(null);
       if (isMobile()) setSidebarOpen(false);
       return;
     }
     setSelectedRecord(record);
+    setCurrentRecordId(record.id);
     let stages: RefinementStage[] = [];
     try {
       stages = JSON.parse(record.stages);
@@ -141,7 +145,8 @@ export default function App() {
     setActualCycles(0);
     setCurrentLog("初始化引擎中...");
 
-    let currentRecordId: number | null = null;
+    let newRecordId: number | null = null;
+    setCurrentRecordId(null);
     stagesRef.current = [];
 
     try {
@@ -153,7 +158,8 @@ export default function App() {
       });
       if (createRes.ok) {
         const { id } = await createRes.json();
-        currentRecordId = id;
+        newRecordId = id;
+        setCurrentRecordId(id);
         setHistoryRefreshKey(prev => prev + 1);
       }
 
@@ -164,7 +170,7 @@ export default function App() {
         cycles: String(cycles),
         session_id: sessionId,
       });
-      if (currentRecordId) sseParams.set('id', String(currentRecordId));
+      if (newRecordId) sseParams.set('id', String(newRecordId));
       const eventSource = new EventSource(`/api/refine?${sseParams.toString()}${adminToken ? `&admin_token=${encodeURIComponent(adminToken)}` : ''}`);
 
       eventSource.onmessage = (event) => {
@@ -180,8 +186,9 @@ export default function App() {
             setIsLoading(false);
             eventSource.close();
             // Delete incomplete record on error
-            if (currentRecordId) {
-              apiFetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
+            if (newRecordId) {
+              apiFetch(`/api/refinements/${newRecordId}`, { method: 'DELETE' });
+              setCurrentRecordId(null);
               setHistoryRefreshKey(prev => prev + 1);
             }
             return;
@@ -206,18 +213,7 @@ export default function App() {
               setResult(prev => {
                 if (!prev) return null;
                 const newStages = [...prev.stages];
-                // For iterative stages, we want to keep them all
-                if (data.cycle !== undefined && (data.stage === "redteam" || data.stage === "synthesizer")) {
-                  newStages.push({ ...config, content: data.content });
-                } else {
-                  // For others (architect/boundary), we might want to update or insert
-                  const existingIdx = newStages.findIndex(s => s.name === config.name);
-                  if (existingIdx > -1) {
-                    newStages[existingIdx] = { ...config, content: data.content };
-                  } else {
-                    newStages.push({ ...config, content: data.content });
-                  }
-                }
+                newStages.push({ ...config, content: data.content });
                 stagesRef.current = newStages;
                 return { ...prev, stages: newStages };
               });
@@ -239,10 +235,124 @@ export default function App() {
         eventSource.close();
         setIsLoading(false);
         // Delete incomplete record on error
-        if (currentRecordId) {
-          apiFetch(`/api/refinements/${currentRecordId}`, { method: 'DELETE' });
+        if (newRecordId) {
+          apiFetch(`/api/refinements/${newRecordId}`, { method: 'DELETE' });
+          setCurrentRecordId(null);
           setHistoryRefreshKey(prev => prev + 1);
         }
+      };
+
+    } catch (err: any) {
+      setError(err.message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (!currentRecordId || !result) return;
+
+    setIsLoading(true);
+    setError(null);
+    setShowLogs(true);
+    setCurrentLog("续跑初始化中...");
+
+    // Convert old finalLogic and explanation into stages for comparison
+    const oldStages = [...result.stages];
+    if (result.finalLogic) {
+      oldStages.push({
+        name: `结晶结论 #${actualCycles}`,
+        title: `结晶结论 #${actualCycles} (Crystallizer)`,
+        content: result.finalLogic
+      });
+    }
+    if (explanation) {
+      oldStages.push({
+        name: `深度解读 #${actualCycles}`,
+        title: `深度解读 #${actualCycles} (Explainer)`,
+        content: explanation
+      });
+    }
+
+    // Keep old stages, clear finalLogic/explanation for new ones
+    setResult(prev => prev ? {
+      ...prev,
+      finalLogic: "",
+      stages: oldStages
+    } : null);
+    setExplanation(null);
+    setActualCycles(0);
+    stagesRef.current = oldStages;
+
+    try {
+      const sessionId = getSessionId();
+      const adminToken = getAdminToken();
+      const sseParams = new URLSearchParams({
+        input: result.input,
+        cycles: String(resumeCycles),
+        session_id: sessionId,
+        resume_id: String(currentRecordId),
+      });
+      sseParams.set('id', String(currentRecordId));
+      const eventSource = new EventSource(`/api/refine?${sseParams.toString()}${adminToken ? `&admin_token=${encodeURIComponent(adminToken)}` : ''}`);
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.log) {
+          setCurrentLog(data.log);
+        }
+
+        if (data.stage) {
+          if (data.stage === "error") {
+            setError(data.message);
+            setIsLoading(false);
+            eventSource.close();
+            // Don't delete record on resume error - old data is still valid
+            setHistoryRefreshKey(prev => prev + 1);
+            return;
+          }
+          if (data.stage === "finalLogic") {
+            setResult(prev => prev ? { ...prev, finalLogic: data.content } : null);
+            finalLogicRef.current = data.content;
+            setActualCycles(data.actualCycles);
+          } else if (data.stage === "explanation") {
+            setExplanation(data.content);
+            explanationRef.current = data.content;
+          } else {
+            const stageMap: Record<string, { name: string, title: string }> = {
+              architect: { name: "初始架构", title: "逻辑解构 (Architect)" },
+              redteam: { name: `迭代对抗 #${data.cycle || 1}`, title: "红方压力测试 (Red Team)" },
+              synthesizer: { name: `迭代精炼 #${data.cycle || 1}`, title: "合成与剥离 (Synthesizer)" },
+              boundary: { name: "终局场域", title: "边界判定 (Boundary Definer)" }
+            };
+
+            const config = stageMap[data.stage];
+            if (config) {
+              setResult(prev => {
+                if (!prev) return null;
+                const newStages = [...prev.stages];
+                newStages.push({ ...config, content: data.content });
+                stagesRef.current = newStages;
+                return { ...prev, stages: newStages };
+              });
+            }
+          }
+        }
+
+        if (data.done) {
+          eventSource.close();
+          setIsLoading(false);
+          setCurrentLog("续跑完成。");
+          setHistoryRefreshKey(prev => prev + 1);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        setError("续跑过程因意外中断。可能是API限流。");
+        eventSource.close();
+        setIsLoading(false);
+        // Don't delete record on resume error
+        setHistoryRefreshKey(prev => prev + 1);
       };
 
     } catch (err: any) {
@@ -331,6 +441,8 @@ export default function App() {
     if (name.includes("对抗") || name.includes("redteam")) return { icon: ShieldAlert, color: "text-red-400", border: "border-red-500/20", bg: "bg-red-500/5" };
     if (name.includes("精炼") || name.includes("synthesizer")) return { icon: Zap, color: "text-blue-400", border: "border-blue-500/20", bg: "bg-blue-500/5" };
     if (name.includes("架构") || name.includes("architect")) return { icon: Cpu, color: "text-zinc-400", border: "border-white/20", bg: "bg-white/5" };
+    if (name.includes("结晶") || name.includes("crystallizer")) return { icon: Zap, color: "text-amber-400", border: "border-amber-500/20", bg: "bg-amber-500/5" };
+    if (name.includes("解读") || name.includes("explainer")) return { icon: CheckCircle2, color: "text-cyan-400", border: "border-cyan-500/20", bg: "bg-cyan-500/5" };
     return { icon: MapPin, color: "text-green-400", border: "border-green-500/20", bg: "bg-green-500/5" };
   };
 
@@ -347,6 +459,7 @@ export default function App() {
           setResult(null);
           setExplanation(null);
           setActualCycles(0);
+          setCurrentRecordId(null);
           setInput('');
           smoothScrollToTop();
           if (isMobile()) setSidebarOpen(false);
@@ -363,6 +476,7 @@ export default function App() {
               setResult(null);
               setExplanation(null);
               setActualCycles(0);
+              setCurrentRecordId(null);
               smoothScrollToTop();
             }
           }}
@@ -573,6 +687,28 @@ export default function App() {
                           </div>
                         )}
                       </div>
+
+                      {/* Resume controls */}
+                      {!isLoading && currentRecordId && (
+                        <div className="flex items-center gap-4 mt-6 pt-4 border-t border-black/10">
+                          <span className="text-[9px] font-bold text-zinc-500 uppercase">继续演化:</span>
+                          <input
+                            type="range"
+                            min="1"
+                            max="5"
+                            value={resumeCycles}
+                            onChange={(e) => setResumeCycles(parseInt(e.target.value))}
+                            className="w-24 accent-black"
+                          />
+                          <span className="text-xs font-bold text-black w-4">{resumeCycles}</span>
+                          <button
+                            onClick={handleResume}
+                            className="px-4 py-2 border border-black/20 hover:border-black hover:bg-black hover:text-white transition-all text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                          >
+                            继续演化 {resumeCycles} 轮
+                          </button>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="py-12 flex flex-col items-center justify-center space-y-4">

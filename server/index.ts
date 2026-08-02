@@ -19,16 +19,18 @@ app.use(express.json());
 const llm = createProvider();
 
 app.get("/api/refine", async (req, res) => {
-  const { input: inputQuery, cycles: cyclesQuery, id: idQuery, session_id: sessionIdQuery, admin_token: adminTokenQuery } = req.query;
+  const { input: inputQuery, cycles: cyclesQuery, id: idQuery, session_id: sessionIdQuery, admin_token: adminTokenQuery, resume_id: resumeIdQuery } = req.query;
   const input = inputQuery as string;
   const cycles = parseInt(cyclesQuery as string) || 1;
   const recordId = idQuery ? parseInt(idQuery as string) : null;
+  const resumeId = resumeIdQuery ? parseInt(resumeIdQuery as string) : null;
+  const isResume = !!resumeId;
   const adminToken = process.env.ADMIN_TOKEN;
   const isAdmin = !!adminToken && adminTokenQuery === adminToken;
   const { sessionId: headerSessionId } = getAuthContext(req);
   const sessionId = isAdmin ? headerSessionId : (sessionIdQuery as string || headerSessionId);
 
-  console.log(`[GET /api/refine] Starting refinement: input="${input}", cycles=${cycles}, recordId=${recordId}`);
+  console.log(`[GET /api/refine] Starting refinement: input="${input}", cycles=${cycles}, recordId=${recordId}, resumeId=${resumeId}`);
 
   if (!input) {
     return res.status(400).json({ error: "Missing input" });
@@ -45,14 +47,62 @@ app.get("/api/refine", async (req, res) => {
   };
 
   try {
-    console.log(`Refining: "${input}" with ${cycles} cycles.`);
+    console.log(`Refining: "${input}" with ${cycles} cycles${isResume ? ` (resume from id=${resumeId})` : ""}.`);
 
     // Collect stages for database storage
     const collectedStages: { name: string; title: string; content: string }[] = [];
 
-    // --- STEP 1: The Architect ---
-    sendEvent({ log: "架构组正在解析原始逻辑空间..." });
-    const architectPrompt = `将以下输入转化为基本的核心因果逻辑结构，识别背后的变量关系与隐含假设。
+    // --- Resume: load old record and extract stages ---
+    let architectOutput = "";
+    let currentLogic = "";
+    let cycleOffset = 0;
+
+    if (isResume && resumeId) {
+      sendEvent({ log: "正在加载历史演化数据..." });
+      const oldRecord = getRefinementById(db, resumeId, isAdmin ? undefined : sessionId);
+      if (!oldRecord) {
+        sendEvent({ stage: "error", message: "续跑失败：找不到原始记录" });
+        return res.end();
+      }
+
+      let oldStages: { name: string; title: string; content: string }[] = [];
+      try {
+        oldStages = JSON.parse(oldRecord.stages);
+      } catch (e) {
+        sendEvent({ stage: "error", message: "续跑失败：无法解析历史阶段数据" });
+        return res.end();
+      }
+
+      const architectStage = oldStages.find(s => s.name === "architect" || s.name.includes("架构"));
+      const lastSynthStage = [...oldStages].reverse().find(s => s.name === "synthesizer" || s.name.includes("精炼"));
+
+      if (!architectStage || !lastSynthStage) {
+        sendEvent({ stage: "error", message: "续跑失败：找不到必要的阶段数据（架构师或合成器）" });
+        return res.end();
+      }
+
+      architectOutput = architectStage.content;
+      currentLogic = lastSynthStage.content;
+      cycleOffset = oldRecord.cycles;
+
+      // Start with old stages
+      collectedStages.push(...oldStages);
+
+      // Add old finalLogic and explanation as stages for comparison
+      if (oldRecord.finalLogic) {
+        collectedStages.push({ name: "crystallizer", title: `结晶结论 #${oldRecord.cycles} (Crystallizer)`, content: oldRecord.finalLogic });
+      }
+      if (oldRecord.explanation) {
+        collectedStages.push({ name: "explainer", title: `深度解读 #${oldRecord.cycles} (Explainer)`, content: oldRecord.explanation });
+      }
+
+      sendEvent({ log: `已加载 ${cycleOffset} 轮演化的历史数据，开始续跑 ${cycles} 轮...` });
+    }
+
+    // --- STEP 1: The Architect (skip if resume) ---
+    if (!isResume) {
+      sendEvent({ log: "架构组正在解析原始逻辑空间..." });
+      const architectPrompt = `将以下输入转化为基本的核心因果逻辑结构，识别背后的变量关系与隐含假设。
 
     如果输入是一个问题，先给出一个你认为最合理、最有解释力的初步回答或立场，然后对该回答进行逻辑解构。
     如果输入是一个观点或命题，直接进行逻辑解构。
@@ -61,23 +111,22 @@ app.get("/api/refine", async (req, res) => {
     【输出要求】：最终输出必须是一个明确的、可被证伪的逻辑结构（而非一个问题分析或开放式讨论），便于后续进行压力测试。
 
     输入： "${input}"`;
-    const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。无论输入是问题还是命题，你都必须产出一个明确的逻辑立场作为后续精炼的起点。请使用中文。";
-    const architectOutput = await llm.generate(architectPrompt, architectSystem, { reasoning: true });
-    sendEvent({ stage: "architect", content: architectOutput });
-    collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architectOutput });
-
-    let currentLogic = architectOutput;
-    let lastRefinement = "";
+      const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。无论输入是问题还是命题，你都必须产出一个明确的逻辑立场作为后续精炼的起点。请使用中文。";
+      architectOutput = await llm.generate(architectPrompt, architectSystem, { reasoning: true });
+      sendEvent({ stage: "architect", content: architectOutput });
+      collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architectOutput });
+      currentLogic = architectOutput;
+    }
 
     // --- ITERATION LOOP ---
     for (let c = 1; c <= cycles; c++) {
-      sendEvent({ log: `第 ${c}/${cycles} 轮迭代：红方部队正在寻找逻辑死角...`, cycle: c });
-      
+      const cycleNum = cycleOffset + c;
+      sendEvent({ log: `第 ${cycleNum}/${cycleOffset + cycles} 轮迭代：红方部队正在寻找逻辑死角...`, cycle: cycleNum });
+
       // STEP 2: Red Team
       const redTeamPrompt = `基于此逻辑结构：
       原始观点： "${input}"
       当前逻辑： ${currentLogic}
-      ${lastRefinement ? `上一轮修正要点： ${lastRefinement}` : ""}
 
       请按以下步骤进行：
 
@@ -92,16 +141,15 @@ app.get("/api/refine", async (req, res) => {
       3. 说明该反例具体击中了当前逻辑的哪个环节（前提、推理链条、隐含假设）`;
       const redTeamSystem = "你是 'The Red Team'。你是一个精准的逻辑批评者。你的任务是深入理解当前逻辑后，找出其在现实世界中无法闭环的关键弱点。你的反驳必须建立在对原逻辑的准确理解之上，攻击实际的逻辑缺陷，而非曲解后的稻草人。请使用中文。";
       const redTeamOutput = await llm.generate(redTeamPrompt, redTeamSystem, { reasoning: true });
-      sendEvent({ stage: "redteam", content: redTeamOutput, cycle: c });
-      collectedStages.push({ name: "redteam", title: `红方压力测试 #${c} (Red Team)`, content: redTeamOutput });
+      sendEvent({ stage: "redteam", content: redTeamOutput, cycle: cycleNum });
+      collectedStages.push({ name: "redteam", title: `红方压力测试 #${cycleNum} (Red Team)`, content: redTeamOutput });
 
-      sendEvent({ log: `第 ${c}/${cycles} 轮迭代：合成器正在重塑逻辑...`, cycle: c });
-      
+      sendEvent({ log: `第 ${cycleNum}/${cycleOffset + cycles} 轮迭代：合成器正在重塑逻辑...`, cycle: cycleNum });
+
       // STEP 3: Synthesizer
       const synthesizerPrompt = `原始观点： "${input}"
       当前逻辑： ${currentLogic}
       红方反例： ${redTeamOutput}
-      ${lastRefinement ? `上一轮修正要点： ${lastRefinement}` : ""}
 
       请按以下步骤进行：
 
@@ -122,9 +170,8 @@ app.get("/api/refine", async (req, res) => {
       const synthesizerSystem = "你是 'The Synthesizer'。你合成对抗性的意见并重塑更强壮的真理体系。请使用中文。";
       const synthesizerOutput = await llm.generate(synthesizerPrompt, synthesizerSystem, { reasoning: true });
       currentLogic = synthesizerOutput;
-      lastRefinement = synthesizerOutput;
-      sendEvent({ stage: "synthesizer", content: synthesizerOutput, cycle: c });
-      collectedStages.push({ name: "synthesizer", title: `合成与剥离 #${c} (Synthesizer)`, content: synthesizerOutput });
+      sendEvent({ stage: "synthesizer", content: synthesizerOutput, cycle: cycleNum });
+      collectedStages.push({ name: "synthesizer", title: `合成与剥离 #${cycleNum} (Synthesizer)`, content: synthesizerOutput });
     }
 
     // --- STEP 4: The Boundary Definer ---
@@ -169,7 +216,8 @@ app.get("/api/refine", async (req, res) => {
     仅输出这句精炼结论，绝不要带有任何前言、引言、多余说明。`;
     const crystallizationSystem = "你是 'The Crystallizer'。你负责产出经过证伪检验的、简洁的、难以反驳的逻辑表述。实事求是、准确描述因果关系，符合奥卡姆剃刀原则，具备系统性视角。请使用中文，直接给出结论，无需废话。";
     const finalLogic = await llm.generate(crystallizationPrompt, crystallizationSystem, { reasoning: true });
-    sendEvent({ stage: "finalLogic", content: finalLogic, actualCycles: cycles });
+    const totalCycles = cycleOffset + cycles;
+    sendEvent({ stage: "finalLogic", content: finalLogic, actualCycles: totalCycles });
 
     // --- STEP 6: The Explainer ---
     sendEvent({ log: "解读者正在解读最终结论..." });
@@ -189,6 +237,7 @@ app.get("/api/refine", async (req, res) => {
         finalLogic,
         explanation,
         stages: collectedStages,
+        cycles: totalCycles,
       }, isAdmin ? undefined : sessionId);
       sendEvent({ refinementId: recordId });
     } else {
@@ -199,7 +248,7 @@ app.get("/api/refine", async (req, res) => {
         finalLogic,
         explanation,
         stages: collectedStages,
-        cycles,
+        cycles: totalCycles,
       }, sessionId);
       console.log(`[GET /api/refine] Created new record with id=${refinementId}`);
       sendEvent({ refinementId });

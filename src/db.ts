@@ -115,7 +115,7 @@ export function createRefinement(db: SqlJsDatabase, input: string, cycles: numbe
 export function updateRefinement(
   db: SqlJsDatabase,
   id: number,
-  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string }[] },
+  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string }[]; cycles?: number },
   sessionId?: string
 ): boolean {
   const record = getRefinementById(db, id, sessionId);
@@ -124,16 +124,17 @@ export function updateRefinement(
   const finalLogic = data.finalLogic ?? record.finalLogic;
   const explanation = data.explanation !== undefined ? data.explanation : record.explanation;
   const stages = data.stages ? JSON.stringify(data.stages) : record.stages;
+  const cycles = data.cycles ?? record.cycles;
 
   if (sessionId !== undefined) {
     db.run(
-      `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ? WHERE id = ? AND session_id = ?`,
-      [finalLogic, explanation, stages, id, sessionId]
+      `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ?, cycles = ? WHERE id = ? AND session_id = ?`,
+      [finalLogic, explanation, stages, cycles, id, sessionId]
     );
   } else {
     db.run(
-      `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ? WHERE id = ?`,
-      [finalLogic, explanation, stages, id]
+      `UPDATE refinements SET final_logic = ?, explanation = ?, stages = ?, cycles = ? WHERE id = ?`,
+      [finalLogic, explanation, stages, cycles, id]
     );
   }
   saveDb(db);
