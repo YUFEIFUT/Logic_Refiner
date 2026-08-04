@@ -25,6 +25,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { clsx, type ClassValue } from "clsx";
@@ -666,7 +667,7 @@ export default function App() {
                             </button>
                           </div>
                           <div className="text-sm font-mono leading-relaxed text-zinc-800 prose prose-sm max-w-none prose-p:my-2 prose-strong:text-black">
-                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{explanation}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>{explanation}</ReactMarkdown>
                           </div>
                         </motion.div>
                       )}
@@ -787,8 +788,8 @@ export default function App() {
                                 <h3 className="text-xs font-bold uppercase leading-tight pr-4">{stage.title}</h3>
                               </header>
                               <div className="flex-1 text-[11px] leading-relaxed text-zinc-400 font-mono overflow-y-auto custom-scrollbar">
-                                <div className="prose prose-invert prose-zinc max-w-none prose-p:my-2 prose-strong:text-white prose-ul:pl-4 prose-li:my-1 prose-headings:text-[10px] prose-headings:uppercase prose-headings:font-bold prose-headings:mb-2 text-[11px]">
-                                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{stage.content}</ReactMarkdown>
+                                <div className="prose prose-sm prose-invert prose-zinc max-w-none prose-p:my-2 prose-p:text-[11px] prose-li:text-[11px] prose-strong:text-white prose-ul:pl-4 prose-li:my-1 prose-headings:text-[10px] prose-headings:uppercase prose-headings:font-bold prose-headings:mb-2 text-[11px]">
+                                  <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>{stage.content}</ReactMarkdown>
                                 </div>
                               </div>
                             </motion.div>
