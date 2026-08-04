@@ -718,7 +718,7 @@ export default function App() {
                 <div className="absolute top-0 right-0 p-4 opacity-10">
                    {isLoading ? <Loader2 className="w-24 h-24 animate-spin" /> : <Zap className="w-24 h-24 rotate-12" />}
                 </div>
-                <div className="max-w-4xl space-y-6 relative">
+                <div className="space-y-6 relative">
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-4">
                       <div className="h-0.5 w-12 bg-black/20" />
