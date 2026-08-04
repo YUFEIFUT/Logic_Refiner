@@ -58,6 +58,13 @@ export interface ProviderSpec {
    * Mistral 规范使用 "max_tokens"，故在此显式声明以适配。
    */
   maxTokensField?: string;
+  /**
+   * 是否支持流式（SSE）调用。
+   * true：streamGenerate 走真流式（读 response.body 流、按 OpenAI SSE 帧解析）；
+   * 未声明/false：streamGenerate 退化为一次性 generate，仅发单条 delta（保证调用方统一）。
+   * 默认 false，后续按 provider 逐个点亮。
+   */
+  streaming?: boolean;
 }
 
 /** 登记表：provider 名 → 能力声明 */
@@ -108,6 +115,13 @@ export interface ProviderConfig {
 /**
  * LLM Provider 接口契约
  */
+export interface StreamHandlers {
+  /** 收到答案增量（逐 token / 逐 chunk）时回调 */
+  onDelta?: (delta: string) => void;
+  /** 收到思考链增量（reasoning_content / thinking chunk）时回调；未开启思考则不会触发 */
+  onThinking?: (delta: string) => void;
+}
+
 export interface LLMProvider {
   /**
    * 生成文本
@@ -117,6 +131,22 @@ export interface LLMProvider {
    * @returns 模型生成的文本（最终答案；思考内容不对外暴露）
    */
   generate(prompt: string, system: string, opts?: GenerateOptions): Promise<string>;
+
+  /**
+   * 流式生成文本：边收边通过 handlers 回调增量，并最终返回完整文本（供调用方作为下游阶段输入）。
+   * 非流式 provider（spec.streaming=false）退化为一次性 generate + 单条 onDelta。
+   * @param prompt 用户输入
+   * @param system 系统指令
+   * @param opts 调用级参数
+   * @param handlers 增量回调（onDelta / onThinking）
+   * @returns 完整文本
+   */
+  streamGenerate(
+    prompt: string,
+    system: string,
+    opts: GenerateOptions | undefined,
+    handlers: StreamHandlers
+  ): Promise<string>;
 }
 
 /** LLM_REASONING_DEFAULT 合法档位集合 */

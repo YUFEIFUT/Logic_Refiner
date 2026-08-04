@@ -6,7 +6,7 @@ export interface RefinementInput {
   input: string;
   finalLogic: string;
   explanation: string | null;
-  stages: { name: string; title: string; content: string }[];
+  stages: { name: string; title: string; content: string; thinking?: string }[];
   cycles: number;
 }
 
@@ -115,7 +115,7 @@ export function createRefinement(db: SqlJsDatabase, input: string, cycles: numbe
 export function updateRefinement(
   db: SqlJsDatabase,
   id: number,
-  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string }[]; cycles?: number },
+  data: { finalLogic?: string; explanation?: string | null; stages?: { name: string; title: string; content: string; thinking?: string }[]; cycles?: number },
   sessionId?: string
 ): boolean {
   const record = getRefinementById(db, id, sessionId);

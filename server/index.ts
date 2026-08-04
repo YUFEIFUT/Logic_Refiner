@@ -46,11 +46,36 @@ app.get("/api/refine", async (req, res) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
+  // 流式阶段执行器：发 open 建空卡 → 增量推送 delta/thinking → 发 complete。
+  // 返回完整 {content, thinking} 供落库与下游阶段输入。
+  const runStage = async (
+    stage: string,
+    prompt: string,
+    system: string,
+    title: string,
+    cycle?: number
+  ): Promise<{ content: string; thinking: string }> => {
+    const acc = { content: "", thinking: "" };
+    sendEvent({ stage, cycle, name: stage, title, open: true });
+    await llm.streamGenerate(prompt, system, { reasoning: true }, {
+      onDelta: (d) => {
+        acc.content += d;
+        sendEvent({ stage, cycle, delta: d });
+      },
+      onThinking: (t) => {
+        acc.thinking += t;
+        sendEvent({ stage, cycle, thinking: t });
+      },
+    });
+    sendEvent({ stage, cycle, complete: true });
+    return acc;
+  };
+
   try {
     console.log(`Refining: "${input}" with ${cycles} cycles${isResume ? ` (resume from id=${resumeId})` : ""}.`);
 
     // Collect stages for database storage
-    const collectedStages: { name: string; title: string; content: string }[] = [];
+    const collectedStages: { name: string; title: string; content: string; thinking?: string }[] = [];
 
     // --- Resume: load old record and extract stages ---
     let architectOutput = "";
@@ -65,7 +90,7 @@ app.get("/api/refine", async (req, res) => {
         return res.end();
       }
 
-      let oldStages: { name: string; title: string; content: string }[] = [];
+      let oldStages: { name: string; title: string; content: string; thinking?: string }[] = [];
       try {
         oldStages = JSON.parse(oldRecord.stages);
       } catch (e) {
@@ -112,10 +137,10 @@ app.get("/api/refine", async (req, res) => {
 
     输入： "${input}"`;
       const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。无论输入是问题还是命题，你都必须产出一个明确的逻辑立场作为后续精炼的起点。请使用中文。";
-      architectOutput = await llm.generate(architectPrompt, architectSystem, { reasoning: true });
-      sendEvent({ stage: "architect", content: architectOutput });
-      collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architectOutput });
-      currentLogic = architectOutput;
+      const architect = await runStage("architect", architectPrompt, architectSystem, "逻辑解构 (Architect)");
+      architectOutput = architect.content;
+      currentLogic = architect.content;
+      collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architect.content, thinking: architect.thinking });
     }
 
     // --- ITERATION LOOP ---
@@ -140,9 +165,9 @@ app.get("/api/refine", async (req, res) => {
       2. 在当前逻辑的讨论层级内有效（如逻辑在讨论认知现象，就不得用量子物理等不同层级的场景来反驳）
       3. 说明该反例具体击中了当前逻辑的哪个环节（前提、推理链条、隐含假设）`;
       const redTeamSystem = "你是 'The Red Team'。你是一个精准的逻辑批评者。你的任务是深入理解当前逻辑后，找出其在现实世界中无法闭环的关键弱点。你的反驳必须建立在对原逻辑的准确理解之上，攻击实际的逻辑缺陷，而非曲解后的稻草人。请使用中文。";
-      const redTeamOutput = await llm.generate(redTeamPrompt, redTeamSystem, { reasoning: true });
-      sendEvent({ stage: "redteam", content: redTeamOutput, cycle: cycleNum });
-      collectedStages.push({ name: "redteam", title: `红方压力测试 #${cycleNum} (Red Team)`, content: redTeamOutput });
+      const redTeam = await runStage("redteam", redTeamPrompt, redTeamSystem, `红方压力测试 #${cycleNum} (Red Team)`, cycleNum);
+      const redTeamOutput = redTeam.content;
+      collectedStages.push({ name: "redteam", title: `红方压力测试 #${cycleNum} (Red Team)`, content: redTeam.content, thinking: redTeam.thinking });
 
       sendEvent({ log: `第 ${cycleNum}/${cycleOffset + cycles} 轮迭代：合成器正在重塑逻辑...`, cycle: cycleNum });
 
@@ -168,10 +193,9 @@ app.get("/api/refine", async (req, res) => {
       5. 【证伪约束】新逻辑应比当前逻辑更难找到反例。如果无法做到，需明确说明当前逻辑已是最佳状态。
       6. 【简洁原则】尽可能简洁（奥卡姆剃刀原则），不要引入不必要的变量或条件，准确描述变量之间的因果关系，不多不少。`;
       const synthesizerSystem = "你是 'The Synthesizer'。你合成对抗性的意见并重塑更强壮的真理体系。请使用中文。";
-      const synthesizerOutput = await llm.generate(synthesizerPrompt, synthesizerSystem, { reasoning: true });
-      currentLogic = synthesizerOutput;
-      sendEvent({ stage: "synthesizer", content: synthesizerOutput, cycle: cycleNum });
-      collectedStages.push({ name: "synthesizer", title: `合成与剥离 #${cycleNum} (Synthesizer)`, content: synthesizerOutput });
+      const synth = await runStage("synthesizer", synthesizerPrompt, synthesizerSystem, `合成与剥离 #${cycleNum} (Synthesizer)`, cycleNum);
+      currentLogic = synth.content;
+      collectedStages.push({ name: "synthesizer", title: `合成与剥离 #${cycleNum} (Synthesizer)`, content: synth.content, thinking: synth.thinking });
     }
 
     // --- STEP 4: The Boundary Definer ---
@@ -184,9 +208,9 @@ app.get("/api/refine", async (req, res) => {
     3. 提供一个关于此真理在现实世界中成立的概率或贝叶斯认知建议。
     4. 【核心约束】你的分析必须与原始观点"${input}"相关，明确说明精炼后的逻辑如何回应了原始观点。`;
     const boundarySystem = "你是 'The Boundary Definer'。你确定人类认知的边界。请使用中文。";
-    const boundaryOutput = await llm.generate(boundaryPrompt, boundarySystem, { reasoning: true });
-    sendEvent({ stage: "boundary", content: boundaryOutput });
-    collectedStages.push({ name: "boundary", title: "边界判定 (Boundary Definer)", content: boundaryOutput });
+    const boundary = await runStage("boundary", boundaryPrompt, boundarySystem, "边界判定 (Boundary Definer)");
+    const boundaryOutput = boundary.content;
+    collectedStages.push({ name: "boundary", title: "边界判定 (Boundary Definer)", content: boundary.content, thinking: boundary.thinking });
 
     // --- STEP 5: Final Crystallization ---
     sendEvent({ log: "正在提炼最终结论..." });
@@ -215,9 +239,16 @@ app.get("/api/refine", async (req, res) => {
 
     仅输出这句精炼结论，绝不要带有任何前言、引言、多余说明。`;
     const crystallizationSystem = "你是 'The Crystallizer'。你负责产出经过证伪检验的、简洁的、难以反驳的逻辑表述。实事求是、准确描述因果关系，符合奥卡姆剃刀原则，具备系统性视角。请使用中文，直接给出结论，无需废话。";
-    const finalLogic = await llm.generate(crystallizationPrompt, crystallizationSystem, { reasoning: true });
     const totalCycles = cycleOffset + cycles;
-    sendEvent({ stage: "finalLogic", content: finalLogic, actualCycles: totalCycles });
+    sendEvent({ stage: "finalLogic", open: true });
+    let finalLogic = "";
+    await llm.streamGenerate(crystallizationPrompt, crystallizationSystem, { reasoning: true }, {
+      onDelta: (d) => {
+        finalLogic += d;
+        sendEvent({ stage: "finalLogic", delta: d });
+      },
+    });
+    sendEvent({ stage: "finalLogic", complete: true, actualCycles: totalCycles });
 
     // --- STEP 6: The Explainer ---
     sendEvent({ log: "解读者正在解读最终结论..." });
@@ -227,8 +258,15 @@ app.get("/api/refine", async (req, res) => {
     1. 用通俗、生动但绝不廉价的语言，解读该结论的核心含义与逻辑关系。
     2. 提供 2 个生活或工作中的实际对照/应用例子，帮助用户透彻理解这一结论。`;
     const explainerSystem = "你是 'The Explainer'。你用通俗易懂的方式解读经过证伪检验的逻辑表述，帮助用户理解结论背后的因果关系和实际应用。请使用中文。";
-    const explanation = await llm.generate(explainerPrompt, explainerSystem, { reasoning: true });
-    sendEvent({ stage: "explanation", content: explanation });
+    sendEvent({ stage: "explanation", open: true });
+    let explanation = "";
+    await llm.streamGenerate(explainerPrompt, explainerSystem, { reasoning: true }, {
+      onDelta: (d) => {
+        explanation += d;
+        sendEvent({ stage: "explanation", delta: d });
+      },
+    });
+    sendEvent({ stage: "explanation", complete: true });
 
     // Update or create refinement record in database
     if (recordId) {

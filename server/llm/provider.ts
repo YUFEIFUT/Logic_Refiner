@@ -1,9 +1,9 @@
 // 通用 LLM Provider（第二代：登记表驱动，取代基类 + 子类）
 // 一个类适配所有 provider：按 spec 声明组装请求、解析响应、施加温度约束。
 
-import type { LLMProvider, GenerateOptions, ProviderConfig, ProviderSpec } from "./types";
+import type { LLMProvider, GenerateOptions, ProviderConfig, ProviderSpec, StreamHandlers } from "./types";
 import { resolveReasoning } from "./negotiate";
-import { extractAnswer } from "./response";
+import { extractAnswer, extractStreamChunk } from "./response";
 
 export class RegistryProvider implements LLMProvider {
   protected config: ProviderConfig;
@@ -47,6 +47,138 @@ export class RegistryProvider implements LLMProvider {
       }
     }
     throw new Error("Maximum retries reached for API generation.");
+  }
+
+  /**
+   * 流式生成：边收边通过 handlers 回调增量，最终返回完整文本。
+   *
+   * - spec.streaming === true：请求体加 stream:true，读 response.body 流，
+   *   按 OpenAI SSE 帧（data:{...} / data:[DONE]）解析，逐帧抽 content/thinking 回调。
+   * - 否则退化为一次性 generate + 单条 onDelta（调用方无需感知差异）。
+   */
+  async streamGenerate(
+    prompt: string,
+    system: string,
+    opts: GenerateOptions | undefined,
+    handlers: StreamHandlers
+  ): Promise<string> {
+    // 非流式 provider：退化路径，保证上层调用统一
+    if (!this.spec.streaming) {
+      const full = await this.generate(prompt, system, opts);
+      handlers.onDelta?.(full);
+      return full;
+    }
+
+    const enhancedSystem = this.enhanceSystemInstruction(system);
+    const body = this.buildBody(prompt, enhancedSystem, opts);
+    body.stream = true;
+    const headers = this.buildHeaders();
+
+    const retries = 5;
+    // 一旦向调用方推送过增量，说明该请求已部分生效；此时若失败不应重试
+    // （否则重试会再次推送前缀，造成前端重复文本）。仅限"尚未推送任何增量"时重试。
+    let delivered = false;
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`LLM API Error (${response.status}): ${errorText}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          // 极端情况：无 body 流，退化读全量 JSON
+          const data: any = await response.json();
+          const full = extractAnswer(data, this.spec);
+          handlers.onDelta?.(full);
+          return full;
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let full = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // 按 SSE 帧（\n\n 分隔）切分
+          let sep: number;
+          while ((sep = buffer.indexOf("\n\n")) >= 0) {
+            const frame = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+
+            const dataLine = frame
+              .split("\n")
+              .find((l) => l.startsWith("data:"));
+            if (!dataLine) continue;
+
+            const payload = dataLine.slice(5).trim();
+            if (payload === "[DONE]") continue;
+
+            let chunk: any;
+            try {
+              chunk = JSON.parse(payload);
+            } catch {
+              continue; // 跳过无法解析的残帧
+            }
+
+            const { content, thinking } = extractStreamChunk(chunk, this.spec);
+            if (content) {
+              full += content;
+              handlers.onDelta?.(content);
+              delivered = true;
+            }
+            if (thinking) {
+              handlers.onThinking?.(thinking);
+              delivered = true;
+            }
+          }
+        }
+
+        // 冲刷残留 buffer 中的最后一帧（无尾随 \n\n 时）
+        const tail = buffer.trim();
+        if (tail.startsWith("data:")) {
+          const payload = tail.slice(5).trim();
+          if (payload && payload !== "[DONE]") {
+            try {
+              const chunk = JSON.parse(payload);
+              const { content, thinking } = extractStreamChunk(chunk, this.spec);
+              if (content) {
+                full += content;
+                handlers.onDelta?.(content);
+              }
+              if (thinking) handlers.onThinking?.(thinking);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+
+        return full;
+      } catch (error: any) {
+        console.error(`Stream attempt ${i + 1} failed:`, error.message);
+        // 已向调用方推送过增量 → 视为部分成功，任何错误都不再重试/重启，
+        // 否则新一次 fetch 会从头再推一遍增量，造成前端文本重复。直接抛出失败。
+        if (delivered) {
+          throw error;
+        }
+        if (this.isQuotaError(error) && i < retries - 1) {
+          continue;
+        }
+        if (i === retries - 1) {
+          throw error;
+        }
+      }
+    }
+    throw new Error("Maximum retries reached for API streaming.");
   }
 
   /** 构造请求体：注入 model/messages/温度/reasoning 字段/maxTokens */

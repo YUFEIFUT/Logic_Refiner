@@ -47,6 +47,8 @@ export const PROVIDERS: ProviderRegistry = {
     auth: "bearer",
     // Agnes 2.0 Flash：OpenAI 兼容端点，使用 max_tokens 作为总输出上限（文档列出）
     maxTokensField: "max_tokens",
+    // 已验证支持 SSE 流式（OpenAI 兼容 /chat/completions?stream=true）
+    streaming: true,
     reasoning: {
       request: {
         kind: "toggle",

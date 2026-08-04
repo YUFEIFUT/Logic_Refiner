@@ -42,12 +42,97 @@ interface RefinementStage {
   name: string;
   title: string;
   content: string;
+  /** 思考链（agnes 等开启思考时逐字流出并落库；无则为空/未定义） */
+  thinking?: string;
 }
 
 interface RefinementResult {
   input: string;
   finalLogic: string;
   stages: RefinementStage[];
+}
+
+type StageCardConfig = {
+  icon: React.ComponentType<any>;
+  color: string;
+  border: string;
+  bg: string;
+};
+
+// 单阶段卡：渲染内容，并提供「思考过程」可折叠面板（agnes 等开启思考时逐字流出并落库）
+function StageCard({ stage, idx, config, onCopy, copiedId }: {
+  stage: RefinementStage;
+  idx: number;
+  config: StageCardConfig;
+  onCopy: (text: string, id: string) => void;
+  copiedId: string | null;
+}) {
+  const [showThinking, setShowThinking] = useState(false);
+  const Icon = config.icon;
+  const num = (idx + 1).toString().padStart(2, "0");
+  const copyKey = `${stage.name}-${idx}`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: idx * 0.05 }}
+      className={cn("relative border flex flex-col p-5 min-h-[300px]", config.border, config.bg)}
+    >
+      <div className={cn("absolute right-2 top-0 text-[60px] font-bold leading-none select-none pointer-events-none opacity-5 disabled:opacity-0")}>
+        {num}
+      </div>
+      <header className="relative mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Icon className={cn("w-3 h-3", config.color)} />
+            <span className={cn("text-[9px] font-bold uppercase tracking-widest", config.color)}>
+              {stage.name}
+            </span>
+          </div>
+          <button
+            onClick={() => onCopy(stage.content, copyKey)}
+            className="text-zinc-500 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider"
+            title="复制此推演日志"
+          >
+            {copiedId === copyKey ? (
+              <>
+                <Check className="w-2.5 h-2.5 text-green-500" />
+                <span className="text-green-500">已复制</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-2.5 h-2.5" />
+                <span>复制</span>
+              </>
+            )}
+          </button>
+        </div>
+        <h3 className="text-xs font-bold uppercase leading-tight pr-4">{stage.title}</h3>
+      </header>
+      <div className="flex-1 text-[11px] leading-relaxed text-zinc-400 font-mono overflow-y-auto custom-scrollbar">
+        <div className="prose prose-sm prose-invert prose-zinc max-w-none prose-p:my-2 prose-p:text-[11px] prose-li:text-[11px] prose-strong:text-white prose-ul:pl-4 prose-li:my-1 prose-headings:text-[10px] prose-headings:uppercase prose-headings:font-bold prose-headings:mb-2 text-[11px]">
+          <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>{stage.content}</ReactMarkdown>
+        </div>
+      </div>
+      {stage.thinking ? (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <button
+            onClick={() => setShowThinking(v => !v)}
+            className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors"
+          >
+            {showThinking ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            {showThinking ? "隐藏思考过程" : "查看思考过程"}
+          </button>
+          {showThinking && (
+            <div className="mt-2 text-[10px] leading-relaxed text-zinc-500 font-mono whitespace-pre-wrap max-h-72 overflow-y-auto custom-scrollbar opacity-90 border-l border-white/10 pl-3">
+              {stage.thinking}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </motion.div>
+  );
 }
 
 export default function App() {
@@ -79,6 +164,8 @@ export default function App() {
   const stagesRef = useRef<RefinementStage[]>([]);
   const finalLogicRef = useRef<string>('');
   const explanationRef = useRef<string | null>(null);
+  /** 流式期间按 "stage#cycle" 定位当前阶段卡在 result.stages 中的下标，供 delta/thinking 增量 append */
+  const stageIndexRef = useRef<Map<string, number>>(new Map());
 
   const clearDetailState = () => {
     setSelectedRecord(null);
@@ -129,6 +216,112 @@ export default function App() {
     }
   };
 
+  // 共享：把后端 SSE 事件应用到组件状态。run / resume 两条链路共用。
+  // 支持流式（open/delta/thinking/complete）与非流式兜底（content）。
+  function applyRefineData(data: any, ctx: { isResume: boolean; newRecordId: number | null }) {
+    if (data.log) setCurrentLog(data.log);
+    if (data.stage === "finalLogic" && data.actualCycles) setActualCycles(data.actualCycles);
+
+    // 开卡事件：建空卡（阶段）或清空结论/解读字段
+    if (data.open) {
+      if (data.stage === "finalLogic") {
+        setResult(prev => prev ? { ...prev, finalLogic: "" } : null);
+        finalLogicRef.current = "";
+      } else if (data.stage === "explanation") {
+        setExplanation("");
+        explanationRef.current = "";
+      } else if (data.stage) {
+        const key = data.cycle ? `${data.stage}#${data.cycle}` : data.stage;
+        setResult(prev => {
+          if (!prev) return null;
+          const newStages = [...prev.stages, { name: data.name, title: data.title, content: "" }];
+          stageIndexRef.current.set(key, newStages.length - 1);
+          stagesRef.current = newStages;
+          return { ...prev, stages: newStages };
+        });
+      }
+      return;
+    }
+
+    // 答案增量
+    if (data.delta !== undefined) {
+      const key = data.cycle ? `${data.stage}#${data.cycle}` : data.stage;
+      if (data.stage === "finalLogic") {
+        setResult(prev => prev ? { ...prev, finalLogic: (prev.finalLogic || "") + data.delta } : null);
+        finalLogicRef.current = (finalLogicRef.current || "") + data.delta;
+      } else if (data.stage === "explanation") {
+        setExplanation(prev => (prev || "") + data.delta);
+        explanationRef.current = (explanationRef.current || "") + data.delta;
+      } else {
+        setResult(prev => {
+          if (!prev) return null;
+          const idx = stageIndexRef.current.get(key);
+          if (idx === undefined) return prev;
+          const newStages = [...prev.stages];
+          newStages[idx] = { ...newStages[idx], content: (newStages[idx].content || "") + data.delta };
+          stagesRef.current = newStages;
+          return { ...prev, stages: newStages };
+        });
+      }
+      return;
+    }
+
+    // 思考增量（仅思考开启时）
+    if (data.thinking !== undefined) {
+      const key = data.cycle ? `${data.stage}#${data.cycle}` : data.stage;
+      setResult(prev => {
+        if (!prev) return null;
+        const idx = stageIndexRef.current.get(key);
+        if (idx === undefined) return prev;
+        const newStages = [...prev.stages];
+        newStages[idx] = { ...newStages[idx], thinking: (newStages[idx].thinking || "") + data.thinking };
+        stagesRef.current = newStages;
+        return { ...prev, stages: newStages };
+      });
+      return;
+    }
+
+    // 非流式兜底（兼容旧后端）：整体 content
+    if (data.content !== undefined) {
+      if (data.stage === "finalLogic") {
+        setResult(prev => prev ? { ...prev, finalLogic: data.content } : null);
+        finalLogicRef.current = data.content;
+      } else if (data.stage === "explanation") {
+        setExplanation(data.content);
+        explanationRef.current = data.content;
+      } else {
+        const stageMap: Record<string, { name: string; title: string }> = {
+          architect: { name: "初始架构", title: "逻辑解构 (Architect)" },
+          redteam: { name: `迭代对抗 #${data.cycle || 1}`, title: "红方压力测试 (Red Team)" },
+          synthesizer: { name: `迭代精炼 #${data.cycle || 1}`, title: "合成与剥离 (Synthesizer)" },
+          boundary: { name: "终局场域", title: "边界判定 (Boundary Definer)" },
+        };
+        const config = stageMap[data.stage];
+        if (config) {
+          setResult(prev => {
+            if (!prev) return null;
+            const newStages = [...prev.stages];
+            newStages.push({ ...config, content: data.content });
+            stagesRef.current = newStages;
+            return { ...prev, stages: newStages };
+          });
+        }
+      }
+      return;
+    }
+
+    // 错误
+    if (data.stage === "error") {
+      setError(data.message);
+      setIsLoading(false);
+      if (!ctx.isResume && ctx.newRecordId) {
+        apiFetch(`/api/refinements/${ctx.newRecordId}`, { method: 'DELETE' });
+        setCurrentRecordId(null);
+        setHistoryRefreshKey(prev => prev + 1);
+      }
+    }
+  }
+
   const handleRefine = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim()) return;
@@ -149,6 +342,7 @@ export default function App() {
     let newRecordId: number | null = null;
     setCurrentRecordId(null);
     stagesRef.current = [];
+    stageIndexRef.current.clear();
 
     try {
       // Create empty record in database
@@ -176,58 +370,16 @@ export default function App() {
 
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
-
-        if (data.log) {
-          setCurrentLog(data.log);
-        }
-
-        if (data.stage) {
-          if (data.stage === "error") {
-            setError(data.message);
-            setIsLoading(false);
-            eventSource.close();
-            // Delete incomplete record on error
-            if (newRecordId) {
-              apiFetch(`/api/refinements/${newRecordId}`, { method: 'DELETE' });
-              setCurrentRecordId(null);
-              setHistoryRefreshKey(prev => prev + 1);
-            }
-            return;
-          }
-          if (data.stage === "finalLogic") {
-            setResult(prev => prev ? { ...prev, finalLogic: data.content } : null);
-            finalLogicRef.current = data.content;
-            setActualCycles(data.actualCycles);
-          } else if (data.stage === "explanation") {
-            setExplanation(data.content);
-            explanationRef.current = data.content;
-          } else {
-            const stageMap: Record<string, { name: string, title: string }> = {
-              architect: { name: "初始架构", title: "逻辑解构 (Architect)" },
-              redteam: { name: `迭代对抗 #${data.cycle || 1}`, title: "红方压力测试 (Red Team)" },
-              synthesizer: { name: `迭代精炼 #${data.cycle || 1}`, title: "合成与剥离 (Synthesizer)" },
-              boundary: { name: "终局场域", title: "边界判定 (Boundary Definer)" }
-            };
-
-            const config = stageMap[data.stage];
-            if (config) {
-              setResult(prev => {
-                if (!prev) return null;
-                const newStages = [...prev.stages];
-                newStages.push({ ...config, content: data.content });
-                stagesRef.current = newStages;
-                return { ...prev, stages: newStages };
-              });
-            }
-          }
-        }
-
+        applyRefineData(data, { isResume: false, newRecordId });
         if (data.done) {
           eventSource.close();
           setIsLoading(false);
           setCurrentLog("演化完成。");
           // Backend now handles database update via id parameter
           setHistoryRefreshKey(prev => prev + 1);
+        }
+        if (data.stage === "error") {
+          eventSource.close();
         }
       };
 
@@ -283,6 +435,7 @@ export default function App() {
     setExplanation(null);
     setActualCycles(0);
     stagesRef.current = oldStages;
+    stageIndexRef.current.clear();
 
     try {
       const sessionId = getSessionId();
@@ -298,53 +451,15 @@ export default function App() {
 
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
-
-        if (data.log) {
-          setCurrentLog(data.log);
-        }
-
-        if (data.stage) {
-          if (data.stage === "error") {
-            setError(data.message);
-            setIsLoading(false);
-            eventSource.close();
-            // Don't delete record on resume error - old data is still valid
-            setHistoryRefreshKey(prev => prev + 1);
-            return;
-          }
-          if (data.stage === "finalLogic") {
-            setResult(prev => prev ? { ...prev, finalLogic: data.content } : null);
-            finalLogicRef.current = data.content;
-            setActualCycles(data.actualCycles);
-          } else if (data.stage === "explanation") {
-            setExplanation(data.content);
-            explanationRef.current = data.content;
-          } else {
-            const stageMap: Record<string, { name: string, title: string }> = {
-              architect: { name: "初始架构", title: "逻辑解构 (Architect)" },
-              redteam: { name: `迭代对抗 #${data.cycle || 1}`, title: "红方压力测试 (Red Team)" },
-              synthesizer: { name: `迭代精炼 #${data.cycle || 1}`, title: "合成与剥离 (Synthesizer)" },
-              boundary: { name: "终局场域", title: "边界判定 (Boundary Definer)" }
-            };
-
-            const config = stageMap[data.stage];
-            if (config) {
-              setResult(prev => {
-                if (!prev) return null;
-                const newStages = [...prev.stages];
-                newStages.push({ ...config, content: data.content });
-                stagesRef.current = newStages;
-                return { ...prev, stages: newStages };
-              });
-            }
-          }
-        }
-
+        applyRefineData(data, { isResume: true, newRecordId: currentRecordId });
         if (data.done) {
           eventSource.close();
           setIsLoading(false);
           setCurrentLog("续跑完成。");
           setHistoryRefreshKey(prev => prev + 1);
+        }
+        if (data.stage === "error") {
+          eventSource.close();
         }
       };
 
@@ -743,58 +858,16 @@ export default function App() {
                       className="overflow-hidden"
                     >
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                        {result.stages.map((stage, idx) => {
-                          const config = getStageConfig(stage.name);
-                          const Icon = config.icon;
-                          const num = (idx + 1).toString().padStart(2, "0");
-
-                          return (
-                            <motion.div
-                              key={`${stage.name}-${idx}`}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: idx * 0.05 }}
-                              className={cn("relative border flex flex-col p-5 min-h-[300px]", config.border, config.bg)}
-                            >
-                              <div className={cn("absolute right-2 top-0 text-[60px] font-bold leading-none select-none pointer-events-none opacity-5 disabled:opacity-0")}>
-                                {num}
-                              </div>
-                              <header className="relative mb-6">
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-2">
-                                    <Icon className={cn("w-3 h-3", config.color)} />
-                                    <span className={cn("text-[9px] font-bold uppercase tracking-widest", config.color)}>
-                                      {stage.name}
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={() => copyToClipboard(stage.content, `${stage.name}-${idx}`)}
-                                    className="text-zinc-500 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider"
-                                    title="复制此推演日志"
-                                  >
-                                    {copiedId === `${stage.name}-${idx}` ? (
-                                      <>
-                                        <Check className="w-2.5 h-2.5 text-green-500" />
-                                        <span className="text-green-500">已复制</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-2.5 h-2.5" />
-                                        <span>复制</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                                <h3 className="text-xs font-bold uppercase leading-tight pr-4">{stage.title}</h3>
-                              </header>
-                              <div className="flex-1 text-[11px] leading-relaxed text-zinc-400 font-mono overflow-y-auto custom-scrollbar">
-                                <div className="prose prose-sm prose-invert prose-zinc max-w-none prose-p:my-2 prose-p:text-[11px] prose-li:text-[11px] prose-strong:text-white prose-ul:pl-4 prose-li:my-1 prose-headings:text-[10px] prose-headings:uppercase prose-headings:font-bold prose-headings:mb-2 text-[11px]">
-                                  <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>{stage.content}</ReactMarkdown>
-                                </div>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
+                        {result.stages.map((stage, idx) => (
+                          <StageCard
+                            key={`${stage.name}-${idx}`}
+                            stage={stage}
+                            idx={idx}
+                            config={getStageConfig(stage.name)}
+                            onCopy={copyToClipboard}
+                            copiedId={copiedId}
+                          />
+                        ))}
                       </div>
                     </motion.div>
                   )}
