@@ -4,6 +4,7 @@
 import type { LLMProvider, GenerateOptions, ProviderConfig, ProviderSpec, StreamHandlers } from "./types";
 import { resolveReasoning } from "./negotiate";
 import { extractAnswer, extractStreamChunk } from "./response";
+import { enhanceSystemInstruction as enhanceSystemInstructionImpl } from "./enhance";
 
 export class RegistryProvider implements LLMProvider {
   protected config: ProviderConfig;
@@ -234,10 +235,12 @@ export class RegistryProvider implements LLMProvider {
     return h;
   }
 
-  /** 附加 LaTeX 格式提示到 system instruction（与第一代保持一致，向后兼容） */
+  /**
+   * 附加输出格式提示到 system instruction。
+   * 实现已抽至 ./enhance 纯函数；此处保留 protected 方法签名以兼容既有 provider.test.ts 的子类断言（T3.13）。
+   */
   protected enhanceSystemInstruction(system: string): string {
-    return system +
-      "\n重要格式提示：当你输出任何必须的数学公式、定量变量或严密的逻辑代数式时，请使用标准的 LaTeX 语法。行内公式使用单个美元符号 $...$，块级/段落公式使用双美元符号 $$...$$。但请极力避免将非数量化的现实抽象概念生搬硬套进一个生硬造作的伪物理或数学公式中。";
+    return enhanceSystemInstructionImpl(system);
   }
 
   /** 判断是否为 quota / rate limit 错误（值得重试，与第一代一致） */

@@ -5,6 +5,12 @@ import dotenv from "dotenv";
 import { initDb, saveRefinement, getRefinements, getRefinementById, deleteRefinement, createRefinement, updateRefinement, updateRefinementInput } from "../src/db";
 import { getAuthContext } from "../src/utils/auth";
 import { createProvider } from "./llm";
+import {
+  architectSystem, redTeamSystem, synthesizerSystem, boundarySystem,
+  crystallizationSystem, explainerSystem,
+  buildArchitectPrompt, buildRedTeamPrompt, buildSynthesizerPrompt,
+  buildBoundaryPrompt, buildCrystallizationPrompt, buildExplainerPrompt,
+} from "./prompts";
 import type { Database as SqlJsDatabase } from "sql.js";
 
 dotenv.config();
@@ -127,17 +133,7 @@ app.get("/api/refine", async (req, res) => {
     // --- STEP 1: The Architect (skip if resume) ---
     if (!isResume) {
       sendEvent({ log: "架构组正在解析原始逻辑空间..." });
-      const architectPrompt = `将以下输入转化为基本的核心因果逻辑结构，识别背后的变量关系与隐含假设。
-
-    如果输入是一个问题，先给出一个你认为最合理、最有解释力的初步回答或立场，然后对该回答进行逻辑解构。
-    如果输入是一个观点或命题，直接进行逻辑解构。
-
-    【注意】：请避免使用生硬、造作的物理/数学公式形式。关注于核心概念之间的因果推导与哲学结构。
-    【输出要求】：最终输出必须是一个明确的、可被证伪的逻辑结构（而非一个问题分析或开放式讨论），便于后续进行压力测试。
-
-    输入： "${input}"`;
-      const architectSystem = "你是 'The Architect'（架构师）。你的任务是剖析表面观点的因果链条，发现隐藏的底层变量，输出清晰的逻辑演绎和核心假设。无论输入是问题还是命题，你都必须产出一个明确的逻辑立场作为后续精炼的起点。请使用中文。";
-      const architect = await runStage("architect", architectPrompt, architectSystem, "逻辑解构 (Architect)");
+      const architect = await runStage("architect", buildArchitectPrompt(input), architectSystem, "逻辑解构 (Architect)");
       architectOutput = architect.content;
       currentLogic = architect.content;
       collectedStages.push({ name: "architect", title: "逻辑解构 (Architect)", content: architect.content, thinking: architect.thinking });
@@ -149,96 +145,27 @@ app.get("/api/refine", async (req, res) => {
       sendEvent({ log: `第 ${cycleNum}/${cycleOffset + cycles} 轮迭代：红方部队正在寻找逻辑死角...`, cycle: cycleNum });
 
       // STEP 2: Red Team
-      const redTeamPrompt = `基于此逻辑结构：
-      原始观点： "${input}"
-      当前逻辑： ${currentLogic}
-
-      请按以下步骤进行：
-
-      第一步：理解确认
-      用你自己的话，简要复述当前逻辑的核心论点和关键变量关系（2-3 句话）。
-      这一步的目的是确认你真正理解了对方在说什么，而不是攻击一个你误解的版本。
-
-      第二步：精准反驳
-      基于你的理解，列出 3-5 个有力的反例或边界情况。每个反例必须：
-      1. 针对当前逻辑的实际论点，而非你复述时可能引入的简化
-      2. 在当前逻辑的讨论层级内有效（如逻辑在讨论认知现象，就不得用量子物理等不同层级的场景来反驳）
-      3. 说明该反例具体击中了当前逻辑的哪个环节（前提、推理链条、隐含假设）`;
-      const redTeamSystem = "你是 'The Red Team'。你是一个精准的逻辑批评者。你的任务是深入理解当前逻辑后，找出其在现实世界中无法闭环的关键弱点。你的反驳必须建立在对原逻辑的准确理解之上，攻击实际的逻辑缺陷，而非曲解后的稻草人。请使用中文。";
-      const redTeam = await runStage("redteam", redTeamPrompt, redTeamSystem, `红方压力测试 #${cycleNum} (Red Team)`, cycleNum);
+      const redTeam = await runStage("redteam", buildRedTeamPrompt(input, currentLogic), redTeamSystem, `红方压力测试 #${cycleNum} (Red Team)`, cycleNum);
       const redTeamOutput = redTeam.content;
       collectedStages.push({ name: "redteam", title: `红方压力测试 #${cycleNum} (Red Team)`, content: redTeam.content, thinking: redTeam.thinking });
 
       sendEvent({ log: `第 ${cycleNum}/${cycleOffset + cycles} 轮迭代：合成器正在重塑逻辑...`, cycle: cycleNum });
 
       // STEP 3: Synthesizer
-      const synthesizerPrompt = `原始观点： "${input}"
-      当前逻辑： ${currentLogic}
-      红方反例： ${redTeamOutput}
-
-      请按以下步骤进行：
-
-      第一步：反例质量评估
-      逐个审视红方的反例，判断其有效性：
-      - 对于成立的反例：说明它击中了当前逻辑的哪个具体弱点
-      - 对于不成立的反例：说明为什么不成立（如：曲解了原逻辑、范畴错位、与当前逻辑已处理的问题重复）
-      - 对于重复的反例（当前逻辑已覆盖或上一轮修正要点已处理）：标注为已覆盖
-
-      第二步：逻辑精炼
-      仅基于你判定为有效的反例，对逻辑进行"非线性"提炼。
-      1. 剥离表面陈词滥调和鸡汤噪音。
-      2. 引入更本质的隐性变量（如认知边界、环境熵增、非线性反馈）来融合红方的质疑。
-      3. 产出一个更深刻、更具包容性的哲学与理性底层逻辑关系（不要生搬硬套物理或代数方程式，关注概念融合与逻辑深度）。
-      4. 【核心约束】你产出的逻辑必须与原始观点"${input}"相关，是对该观点的深化或修正，而非脱离主题的新创造。
-      5. 【证伪约束】新逻辑应比当前逻辑更难找到反例。如果无法做到，需明确说明当前逻辑已是最佳状态。
-      6. 【简洁原则】尽可能简洁（奥卡姆剃刀原则），不要引入不必要的变量或条件，准确描述变量之间的因果关系，不多不少。`;
-      const synthesizerSystem = "你是 'The Synthesizer'。你合成对抗性的意见并重塑更强壮的真理体系。请使用中文。";
-      const synth = await runStage("synthesizer", synthesizerPrompt, synthesizerSystem, `合成与剥离 #${cycleNum} (Synthesizer)`, cycleNum);
+      const synth = await runStage("synthesizer", buildSynthesizerPrompt(input, currentLogic, redTeamOutput), synthesizerSystem, `合成与剥离 #${cycleNum} (Synthesizer)`, cycleNum);
       currentLogic = synth.content;
       collectedStages.push({ name: "synthesizer", title: `合成与剥离 #${cycleNum} (Synthesizer)`, content: synth.content, thinking: synth.thinking });
     }
 
     // --- STEP 4: The Boundary Definer ---
     sendEvent({ log: "终态分析组正在划定真立场域..." });
-    const boundaryPrompt = `原始观点： "${input}"
-    最终迭代后的精炼逻辑： ${currentLogic}
-
-    1. 定义该逻辑有效的"场域"（适用空间与适用限度）。
-    2. 评估该逻辑在复杂系统下的稳定性和局限性。
-    3. 提供一个关于此真理在现实世界中成立的概率或贝叶斯认知建议。
-    4. 【核心约束】你的分析必须与原始观点"${input}"相关，明确说明精炼后的逻辑如何回应了原始观点。`;
-    const boundarySystem = "你是 'The Boundary Definer'。你确定人类认知的边界。请使用中文。";
-    const boundary = await runStage("boundary", boundaryPrompt, boundarySystem, "边界判定 (Boundary Definer)");
+    const boundary = await runStage("boundary", buildBoundaryPrompt(input, currentLogic), boundarySystem, "边界判定 (Boundary Definer)");
     const boundaryOutput = boundary.content;
     collectedStages.push({ name: "boundary", title: "边界判定 (Boundary Definer)", content: boundary.content, thinking: boundary.thinking });
 
     // --- STEP 5: Final Crystallization ---
     sendEvent({ log: "正在提炼最终结论..." });
-    const crystallizationPrompt = `请基于以下所有分析过程，产出一个经过证伪检验的、简洁的、难以反驳的逻辑表述。
-
-    分析过程：
-    - 初始架构：${architectOutput}
-    - 最终演化逻辑：${currentLogic}
-    - 边界分析：${boundaryOutput}
-    - 原始命题： "${input}"
-
-    【核心标准 - 极其重要】：
-    1. 难以证伪：在目前已知的认知范围内，找不到轻易推翻它的反例
-    2. 奥卡姆剃刀：表述尽可能简洁，不引入不必要的变量或条件——真理往往是简单的
-    3. 准确描述因果关系：不多不少，恰好说清楚变量之间的本质关系
-    4. 与原始命题相关：必须是对原始命题"${input}"的精炼，而非脱离主题的新创造
-    5. 具备系统性视角：揭示命题在更大系统中的位置、边界和相互作用
-
-    【禁止事项】：
-    - 绝对不要产出"形而上""震撼""充满张力"等形式化表述
-    - 绝对不要将抽象概念强行塞进数学或物理公式
-
-    【期望结果】：
-    一个简洁、准确、难以反驳的逻辑表述，例如：
-    "努力是成功的必要非充分条件，其有效性受方向选择、环境结构和随机因素共同调节。"
-
-    仅输出这句精炼结论，绝不要带有任何前言、引言、多余说明。`;
-    const crystallizationSystem = "你是 'The Crystallizer'。你负责产出经过证伪检验的、简洁的、难以反驳的逻辑表述。实事求是、准确描述因果关系，符合奥卡姆剃刀原则，具备系统性视角。请使用中文，直接给出结论，无需废话。";
+    const crystallizationPrompt = buildCrystallizationPrompt({ architectOutput, currentLogic, boundaryOutput, input });
     const totalCycles = cycleOffset + cycles;
     sendEvent({ stage: "finalLogic", open: true });
     let finalLogic = "";
@@ -252,12 +179,7 @@ app.get("/api/refine", async (req, res) => {
 
     // --- STEP 6: The Explainer ---
     sendEvent({ log: "解读者正在解读最终结论..." });
-    const explainerPrompt = `请对以下经过证伪检验的逻辑表述进行通俗易懂的解读：
-    最终结论：${finalLogic}
-    
-    1. 用通俗、生动但绝不廉价的语言，解读该结论的核心含义与逻辑关系。
-    2. 提供 2 个生活或工作中的实际对照/应用例子，帮助用户透彻理解这一结论。`;
-    const explainerSystem = "你是 'The Explainer'。你用通俗易懂的方式解读经过证伪检验的逻辑表述，帮助用户理解结论背后的因果关系和实际应用。请使用中文。";
+    const explainerPrompt = buildExplainerPrompt(finalLogic);
     sendEvent({ stage: "explanation", open: true });
     let explanation = "";
     await llm.streamGenerate(explainerPrompt, explainerSystem, { reasoning: true }, {

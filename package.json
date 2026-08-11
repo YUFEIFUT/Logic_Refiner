@@ -11,7 +11,9 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint:prompts": "tsx scripts/check-prompt-lint.ts",
+    "eval:formula": "tsx scripts/evaluate-no-formula.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

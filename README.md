@@ -50,3 +50,14 @@
 
 3. Run the app:
    `npm run dev`
+
+## Scripts
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 本地启动（tsx 跑 `server/index.ts`，前端 Vite 热更） |
+| `npm run build` | 构建前端 + 打包服务端为 `dist/server.cjs` |
+| `npm run eval:formula` | 量化评估节点"伪数学/公式化"：默认静态读 `refinements.db` 历史基线；加 `--live` 实跑固定语料验证新提示词产出。详见 `docs/requirement2design/reduce-formula-expression.md` |
+| `npm run lint:prompts` | 提示词反公式约束的"红/绿门禁"（纯 tsx，绕开预存的 vitest 环境崩溃）：逐节点 system / prompt / 全局提示断言是否含强硬反公式约束，全过 exit 0 |
+
+> 注：本仓库 `vitest` 在当前运行环境存在预存的加载期崩溃（与业务代码无关），故 TDD 门禁以 `npm run lint:prompts` 承载。
