@@ -50,6 +50,21 @@ const agnesSpec: ProviderSpec = {
   },
 };
 
+const toterSpec: ProviderSpec = {
+  auth: 'bearer',
+  maxTokensField: 'max_tokens',
+  streaming: true,
+  reasoning: {
+    request: {
+      kind: 'toggle',
+      field: 'thinking',
+      on: { type: 'enabled' },
+      off: { type: 'disabled' },
+    },
+    response: { format: 'string' },
+  },
+};
+
 function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     provider: 'mimo',
@@ -326,6 +341,59 @@ describe('RegistryProvider', () => {
     await p.generate('p', 's');
     const body = getCallBody(fetchMock);
     expect(body.max_tokens).toBe(4096);
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
+  // T3.19：toter + reasoning:true → body.thinking.type=enabled，Bearer 头
+  it('T3.19 toter reasoning:true injects thinking.type=enabled, uses Bearer', async () => {
+    const p = new RegistryProvider(makeConfig({ apiKey: 'toter-key' }), toterSpec);
+    await p.generate('p', 's', { reasoning: true });
+    const body = getCallBody(fetchMock);
+    const headers = getCallHeaders(fetchMock);
+    expect(body.thinking).toEqual({ type: 'enabled' });
+    // 显式断言不带 budget_tokens（实测无效）
+    expect((body.thinking as any)?.budget_tokens).toBeUndefined();
+    expect(headers['Authorization']).toBe('Bearer toter-key');
+  });
+
+  // T3.20：toter + reasoning:false → body.thinking.type=disabled
+  it('T3.20 toter reasoning:false injects thinking.type=disabled', async () => {
+    const p = new RegistryProvider(makeConfig({}), toterSpec);
+    await p.generate('p', 's', { reasoning: false });
+    const body = getCallBody(fetchMock);
+    expect(body.thinking).toEqual({ type: 'disabled' });
+  });
+
+  // T3.21：toter 思考模式 + config 温度 0 → body.temperature 仍为 0（无温度约束，passthrough）
+  it('T3.21 toter thinking mode does not constrain temperature', async () => {
+    const p = new RegistryProvider(makeConfig({ temperature: 0 }), toterSpec);
+    await p.generate('p', 's', { reasoning: true });
+    const body = getCallBody(fetchMock);
+    expect(body.temperature).toBe(0);
+  });
+
+  // T3.22：toter 字符串响应 → generate 返回 content，忽略 reasoning_content（与 MiMo 同构）
+  it('T3.22 toter string response returns content, ignores reasoning_content', async () => {
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: 'toter answer', reasoning_content: 'hidden thinking' } }],
+      }),
+      text: () => Promise.resolve(''),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const p = new RegistryProvider(makeConfig({}), toterSpec);
+    const result = await p.generate('p', 's', { reasoning: true });
+    expect(result).toBe('toter answer');
+  });
+
+  // T3.23：toter maxTokens 字段名 = max_tokens
+  it('T3.23 toter maxTokens field name is max_tokens', async () => {
+    const p = new RegistryProvider(makeConfig({ maxTokens: 65536 }), toterSpec);
+    await p.generate('p', 's');
+    const body = getCallBody(fetchMock);
+    expect(body.max_tokens).toBe(65536);
     expect(body.max_completion_tokens).toBeUndefined();
   });
 });

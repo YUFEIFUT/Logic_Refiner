@@ -61,4 +61,24 @@ export const PROVIDERS: ProviderRegistry = {
       response: { format: "string" }, // 思考在 message.reasoning_content，content 是答案（与 MiMo 同构）
     },
   },
+  toter: {
+    auth: "bearer",
+    // toter 是第三方聚合平台，OpenAI 兼容端点，使用 max_tokens 作为输出上限（实测 curl 确认）
+    maxTokensField: "max_tokens",
+    // 已验证支持 SSE 流式（OpenAI 兼容 /chat/completions?stream=true）
+    streaming: true,
+    reasoning: {
+      request: {
+        kind: "toggle",
+        // 思考开关：thinking.type（与 MiMo 同构）
+        // 注：toter 兼容层接受 Anthropic 风格的 thinking.budget_tokens，但实测不生效
+        //    （reasoning_tokens 不受其约束），故不声明，避免传递无效魔法值
+        field: "thinking",
+        on: { type: "enabled" },
+        off: { type: "disabled" },
+        // 实测思考模式下无温度约束（temperature:0.7 正常返回）
+      },
+      response: { format: "string" }, // 思考在 message.reasoning_content，content 是答案（与 MiMo 同构）
+    },
+  },
 };

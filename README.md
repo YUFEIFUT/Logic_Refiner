@@ -22,7 +22,7 @@
 2. Copy `.env.example` to `.env` and fill in your configuration:
 
    ```env
-   # 供应商选择：mimo / mistral / agnes
+   # 供应商选择：mimo / mistral / agnes / toter
    LLM_PROVIDER="mimo"
 
    # API Key（必填）
@@ -45,6 +45,7 @@
    | MiMo | `mimo` | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` |
    | Mistral | `mistral` | `https://api.mistral.ai/v1` | `mistral-medium-3-5` |
    | Agnes | `agnes` | `https://apihub.agnes-ai.com/v1` | `agnes-2.0-flash` |
+   | toter | `toter` | `https://speed.toter.me/v1` | `gemini-3.1-pro` |
 
    Mistral 额外支持 `LLM_REASONING_DEFAULT` 配置推理档位（`high` 或 `none`）。
 

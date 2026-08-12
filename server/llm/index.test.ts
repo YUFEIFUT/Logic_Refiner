@@ -44,15 +44,15 @@ describe('createProvider', () => {
     expect((provider as any).spec.reasoning).toBeUndefined();
   });
 
-  // T4.4：未知 provider → 抛错且信息列出所有支持的 provider（含 agnes，共 8 个）
+  // T4.4：未知 provider → 抛错且信息列出所有支持的 provider（含 toter，共 9 个）
   it('T4.4 throws for unknown provider listing all supported', () => {
     expect(() => createProvider(makeFullEnv({ LLM_PROVIDER: 'unknown' }))).toThrow(/Unknown LLM_PROVIDER/);
     try {
       createProvider(makeFullEnv({ LLM_PROVIDER: 'unknown' }));
     } catch (e: any) {
       expect(e.message).toContain('mistral');
-      // 列出全部 8 个
-      ['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes'].forEach((p) => {
+      // 列出全部 9 个
+      ['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes', 'toter'].forEach((p) => {
         expect(e.message).toContain(p);
       });
     }
@@ -74,7 +74,7 @@ describe('createProvider', () => {
 
 // 补充：PROVIDERS 重新导出可从 index 访问
 describe('PROVIDERS re-export', () => {
-  it('PROVIDERS is re-exported from index with 8 entries', () => {
-    expect(Object.keys(PROVIDERS)).toHaveLength(8);
+  it('PROVIDERS is re-exported from index with 9 entries', () => {
+    expect(Object.keys(PROVIDERS)).toHaveLength(9);
   });
 });

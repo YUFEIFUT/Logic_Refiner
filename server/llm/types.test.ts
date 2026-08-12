@@ -81,13 +81,13 @@ describe('loadProviderConfig', () => {
 });
 
 describe('PROVIDERS registry', () => {
-  // T0.1：8 个 provider 键齐全
-  it('T0.1 should contain all 8 providers', () => {
+  // T0.1：9 个 provider 键齐全
+  it('T0.1 should contain all 9 providers', () => {
     const keys = Object.keys(PROVIDERS);
     expect(keys).toEqual(
-      expect.arrayContaining(['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes'])
+      expect.arrayContaining(['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes', 'toter'])
     );
-    expect(keys).toHaveLength(8);
+    expect(keys).toHaveLength(9);
   });
 
   // T0.2：MiMo toggle 声明
@@ -154,6 +154,27 @@ describe('PROVIDERS registry', () => {
   it('T0.10 agnes response string + maxTokensField max_tokens', () => {
     expect(PROVIDERS.agnes.reasoning?.response.format).toBe('string');
     expect(PROVIDERS.agnes.maxTokensField).toBe('max_tokens');
+  });
+
+  // T0.11：toter toggle 声明（与 MiMo 同构：thinking.type enabled/disabled，无 budget_tokens）
+  it('T0.11 toter reasoning is toggle with thinking.type enabled/disabled (no budget_tokens)', () => {
+    const r = PROVIDERS.toter.reasoning?.request;
+    expect(r?.kind).toBe('toggle');
+    expect(r?.field).toBe('thinking');
+    expect(r?.on).toEqual({ type: 'enabled' });
+    expect(r?.off).toEqual({ type: 'disabled' });
+    // 显式断言不带 budget_tokens（实测无效，避免传递无效魔法值）
+    expect((r?.on as any)?.budget_tokens).toBeUndefined();
+    // 无温度约束：不声明 temperatureMode → 默认 passthrough
+    expect(r?.temperatureMode).toBeUndefined();
+  });
+
+  // T0.12：toter 响应侧 format=string，maxTokensField=max_tokens，streaming=true
+  it('T0.12 toter response string + maxTokensField max_tokens + streaming true', () => {
+    expect(PROVIDERS.toter.reasoning?.response.format).toBe('string');
+    expect(PROVIDERS.toter.maxTokensField).toBe('max_tokens');
+    expect(PROVIDERS.toter.streaming).toBe(true);
+    expect(PROVIDERS.toter.auth).toBe('bearer');
   });
 
   // T0.8：loadProviderConfig 读 LLM_REASONING_DEFAULT
