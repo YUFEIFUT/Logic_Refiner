@@ -194,3 +194,53 @@ describe('Admin password visibility toggle', () => {
     expect(passwordInput).toHaveAttribute('type', 'password');
   });
 });
+
+describe('Execution mode independence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+  });
+
+  it('手动执行模式下提交会打开手动模态框，而不触发自动 SSE 流程', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
+    });
+
+    // 切换到手动执行
+    fireEvent.click(screen.getByRole('button', { name: '手动执行' }));
+    fireEvent.change(screen.getByPlaceholderText(/输入一个问题或逻辑命题/), {
+      target: { value: '测试命题' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '启动多轮演化' }));
+
+    // 打开手动模态框
+    await waitFor(() => {
+      expect(screen.getByText('手动执行模式')).toBeInTheDocument();
+    });
+    // 步骤计数出现，说明进入手动流程
+    expect(screen.getByText(/步骤 1 \/ /)).toBeInTheDocument();
+  });
+
+  it('自动执行模式下提交仍走 SSE，不受手动模式影响', async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText('v1.2.5')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/输入一个问题或逻辑命题/), {
+      target: { value: '测试命题' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '启动多轮演化' }));
+
+    // 自动模式进入"迭代中..."加载态，而非打开手动模态框
+    await waitFor(() => {
+      expect(screen.getByText('迭代中...')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('手动执行模式')).not.toBeInTheDocument();
+  });
+});

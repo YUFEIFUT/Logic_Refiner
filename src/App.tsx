@@ -33,6 +33,7 @@ import { twMerge } from "tailwind-merge";
 import Sidebar from "./components/Sidebar";
 import HistoryList, { type HistoryRecord } from "./components/HistoryList";
 import { apiFetch, getSessionId, getAdminToken, setAdminToken, clearAdminToken, isAdminMode } from "./utils/api";
+import ManualExecutionModal, { type ManualCompleteResult } from "./components/ManualExecutionModal";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -156,6 +157,10 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  // 演化模式：auto=自动调用 LLM API；manual=手动执行（弹窗复制提示词、粘贴结果）
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  // 手动执行模态框是否打开
+  const [manualOpen, setManualOpen] = useState(false);
   const versionClickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -477,6 +482,55 @@ export default function App() {
     }
   };
 
+  // 按当前模式分发提交：manual 打开手动执行模态框，auto 走原有 SSE 流程
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    if (mode === "manual") {
+      setManualOpen(true);
+    } else {
+      handleRefine();
+    }
+  };
+
+  // 手动流程完成：渲染结果并复用保存接口落库
+  const handleManualComplete = async (r: ManualCompleteResult) => {
+    setSelectedRecord(null);
+    setResult({
+      input: r.input,
+      finalLogic: r.finalLogic,
+      stages: r.stages,
+    });
+    setExplanation(r.explanation);
+    setActualCycles(r.cycles);
+    setShowLogs(true);
+    setCurrentLog("手动演化完成。");
+    setManualOpen(false);
+    try {
+      const createRes = await apiFetch('/api/refinements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: r.input, cycles: r.cycles }),
+      });
+      if (createRes.ok) {
+        const { id } = await createRes.json();
+        setCurrentRecordId(id);
+        await apiFetch(`/api/refinements/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            finalLogic: r.finalLogic,
+            explanation: r.explanation,
+            stages: r.stages,
+          }),
+        });
+        setHistoryRefreshKey(prev => prev + 1);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   useEffect(() => {
     if (result?.finalLogic && scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -634,7 +688,7 @@ export default function App() {
 
         {/* Search Bar - Sharp & Minimalist */}
         <section className="mb-16">
-          <form onSubmit={handleRefine} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative group">
                 <input
@@ -669,7 +723,7 @@ export default function App() {
               </button>
             </div>
             
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-6">
               <div className="flex items-center gap-3">
                 <span className="text-[9px] font-bold text-zinc-500 uppercase">演化深度:</span>
                 <input 
@@ -682,8 +736,35 @@ export default function App() {
                 />
                 <span className="text-xs font-bold text-white w-4">{cycles}</span>
               </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase">执行方式:</span>
+                <div className="flex border border-white/20">
+                  <button
+                    type="button"
+                    onClick={() => setMode("auto")}
+                    className={cn(
+                      "px-3 py-1 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer",
+                      mode === "auto" ? "bg-white text-black" : "text-zinc-400 hover:text-white"
+                    )}
+                  >
+                    自动 API
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("manual")}
+                    className={cn(
+                      "px-3 py-1 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer",
+                      mode === "manual" ? "bg-white text-black" : "text-zinc-400 hover:text-white"
+                    )}
+                  >
+                    手动执行
+                  </button>
+                </div>
+              </div>
               <div className="text-[9px] text-zinc-600 uppercase italic">
-                {isLoading ? `[ ${currentLog} ]` : `[ 增加演化深度将提高结论精确度，但消耗更多算力 ]`}
+                {isLoading ? `[ ${currentLog} ]` : mode === "manual"
+                  ? `[ 手动执行：每步弹窗展示提示词，复制到外部平台执行后粘贴结果 ]`
+                  : `[ 增加演化深度将提高结论精确度，但消耗更多算力 ]`}
               </div>
             </div>
           </form>
@@ -994,6 +1075,18 @@ export default function App() {
               )}
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 手动执行模式模态框 */}
+      <AnimatePresence>
+        {manualOpen && (
+          <ManualExecutionModal
+            input={input}
+            cycles={cycles}
+            onClose={() => setManualOpen(false)}
+            onComplete={handleManualComplete}
+          />
         )}
       </AnimatePresence>
     </div>
