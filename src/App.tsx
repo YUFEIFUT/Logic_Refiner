@@ -60,7 +60,7 @@ type StageCardConfig = {
   bg: string;
 };
 
-// 单阶段卡：渲染内容，并提供「思考过程」可折叠面板（agnes 等开启思考时逐字流出并落库）
+// 单阶段卡：「思考过程」可折叠面板置于卡片顶部（标题下方、内容上方，默认折叠），再渲染内容
 function StageCard({ stage, idx, config, onCopy, copiedId }: {
   stage: RefinementStage;
   idx: number;
@@ -111,13 +111,8 @@ function StageCard({ stage, idx, config, onCopy, copiedId }: {
         </div>
         <h3 className="text-xs font-bold uppercase leading-tight pr-4">{stage.title}</h3>
       </header>
-      <div className="flex-1 text-[11px] leading-relaxed text-zinc-400 font-mono overflow-y-auto custom-scrollbar">
-        <div className="prose prose-sm prose-invert prose-zinc max-w-none prose-p:my-2 prose-p:text-[11px] prose-li:text-[11px] prose-strong:text-white prose-ul:pl-4 prose-li:my-1 prose-headings:text-[10px] prose-headings:uppercase prose-headings:font-bold prose-headings:mb-2 text-[11px]">
-          <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>{stage.content}</ReactMarkdown>
-        </div>
-      </div>
       {stage.thinking ? (
-        <div className="mt-3 border-t border-white/10 pt-3">
+        <div className="mb-3 border-b border-white/10 pb-3">
           <button
             onClick={() => setShowThinking(v => !v)}
             className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors"
@@ -132,6 +127,11 @@ function StageCard({ stage, idx, config, onCopy, copiedId }: {
           )}
         </div>
       ) : null}
+      <div className="flex-1 text-[11px] leading-relaxed text-zinc-400 font-mono overflow-y-auto custom-scrollbar">
+        <div className="prose prose-sm prose-invert prose-zinc max-w-none prose-p:my-2 prose-p:text-[11px] prose-li:text-[11px] prose-strong:text-white prose-ul:pl-4 prose-li:my-1 prose-headings:text-[10px] prose-headings:uppercase prose-headings:font-bold prose-headings:mb-2 text-[11px]">
+          <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>{stage.content}</ReactMarkdown>
+        </div>
+      </div>
     </motion.div>
   );
 }
