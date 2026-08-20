@@ -81,4 +81,14 @@ export const PROVIDERS: ProviderRegistry = {
       response: { format: "string" }, // 思考在 message.reasoning_content，content 是答案（与 MiMo 同构）
     },
   },
+  opencode: {
+    auth: "bearer",
+    // opencode：本地代理（get_api_from_opencode/proxy.js）转接 opencode Zen 免费模型，
+    // OpenAI 兼容端点，代理不校验 API Key（随便填）。仅本地开发可用（127.0.0.1）。
+    // 已验证支持 SSE 流式（实测捕获：delta.content / delta.reasoning_content 逐帧推送，
+    // [DONE] 后还有 {"choices":[],"cost":"0"} 尾帧，现有解析已容错）
+    streaming: true,
+    // 模型（如 deepseek-v4-flash-free）默认自带思考，无需请求侧开关字段，故不声明 reasoning；
+    // 思考经 string 型默认分支（delta.reasoning_content）抽取推送
+  },
 };

@@ -81,13 +81,13 @@ describe('loadProviderConfig', () => {
 });
 
 describe('PROVIDERS registry', () => {
-  // T0.1：9 个 provider 键齐全
-  it('T0.1 should contain all 9 providers', () => {
+  // T0.1：10 个 provider 键齐全
+  it('T0.1 should contain all 10 providers', () => {
     const keys = Object.keys(PROVIDERS);
     expect(keys).toEqual(
-      expect.arrayContaining(['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes', 'toter'])
+      expect.arrayContaining(['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes', 'toter', 'opencode'])
     );
-    expect(keys).toHaveLength(9);
+    expect(keys).toHaveLength(10);
   });
 
   // T0.2：MiMo toggle 声明
@@ -175,6 +175,14 @@ describe('PROVIDERS registry', () => {
     expect(PROVIDERS.toter.maxTokensField).toBe('max_tokens');
     expect(PROVIDERS.toter.streaming).toBe(true);
     expect(PROVIDERS.toter.auth).toBe('bearer');
+  });
+
+  // T0.13：opencode 本地代理：bearer + streaming，无 reasoning 声明（模型默认思考，无请求侧开关）
+  it('T0.13 opencode bearer + streaming, no reasoning declared', () => {
+    expect(PROVIDERS.opencode.auth).toBe('bearer');
+    expect(PROVIDERS.opencode.streaming).toBe(true);
+    expect(PROVIDERS.opencode.reasoning).toBeUndefined();
+    expect(PROVIDERS.opencode.maxTokensField).toBeUndefined();
   });
 
   // T0.8：loadProviderConfig 读 LLM_REASONING_DEFAULT

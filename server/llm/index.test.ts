@@ -44,15 +44,15 @@ describe('createProvider', () => {
     expect((provider as any).spec.reasoning).toBeUndefined();
   });
 
-  // T4.4：未知 provider → 抛错且信息列出所有支持的 provider（含 toter，共 9 个）
+  // T4.4：未知 provider → 抛错且信息列出所有支持的 provider（含 opencode，共 10 个）
   it('T4.4 throws for unknown provider listing all supported', () => {
     expect(() => createProvider(makeFullEnv({ LLM_PROVIDER: 'unknown' }))).toThrow(/Unknown LLM_PROVIDER/);
     try {
       createProvider(makeFullEnv({ LLM_PROVIDER: 'unknown' }));
     } catch (e: any) {
       expect(e.message).toContain('mistral');
-      // 列出全部 9 个
-      ['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes', 'toter'].forEach((p) => {
+      // 列出全部 10 个
+      ['mimo', 'openai', 'deepseek', 'qwen', 'moonshot', 'zhipu', 'mistral', 'agnes', 'toter', 'opencode'].forEach((p) => {
         expect(e.message).toContain(p);
       });
     }
@@ -70,11 +70,26 @@ describe('createProvider', () => {
     const provider = createProvider(makeFullEnv({ LLM_PROVIDER: 'openai' }));
     expect(typeof (provider as any).generate).toBe('function');
   });
+
+  // T4.7：LLM_PROVIDER=opencode → RegistryProvider，bearer 鉴权、真流式、无 reasoning 声明
+  // （代理上游为 opencode Zen；模型默认自带思考，无需请求侧开关字段）
+  it('T4.7 returns RegistryProvider with opencode spec (bearer, streaming, no reasoning)', () => {
+    const provider = createProvider(makeFullEnv({
+      LLM_PROVIDER: 'opencode',
+      LLM_BASE_URL: 'http://127.0.0.1:8787/v1',
+      LLM_MODEL: 'deepseek-v4-flash-free',
+    })) as RegistryProvider;
+    expect(provider).toBeInstanceOf(RegistryProvider);
+    const spec = (provider as any).spec;
+    expect(spec.auth).toBe('bearer');
+    expect(spec.streaming).toBe(true);
+    expect(spec.reasoning).toBeUndefined();
+  });
 });
 
 // 补充：PROVIDERS 重新导出可从 index 访问
 describe('PROVIDERS re-export', () => {
-  it('PROVIDERS is re-exported from index with 9 entries', () => {
-    expect(Object.keys(PROVIDERS)).toHaveLength(9);
+  it('PROVIDERS is re-exported from index with 10 entries', () => {
+    expect(Object.keys(PROVIDERS)).toHaveLength(10);
   });
 });

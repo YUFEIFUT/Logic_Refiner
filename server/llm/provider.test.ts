@@ -65,6 +65,10 @@ const toterSpec: ProviderSpec = {
   },
 };
 
+// opencode：本地代理（opencode Zen），Bearer 鉴权、真流式；模型默认思考，
+// 无请求侧开关字段，思考经 delta.reasoning_content 推送（string 型默认分支）
+const opencodeSpec: ProviderSpec = { auth: 'bearer', streaming: true };
+
 function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     provider: 'mimo',
@@ -87,6 +91,23 @@ function getCallHeaders(fetchMock: ReturnType<typeof vi.fn>): Record<string, str
   const call = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
   const init = call[1] as RequestInit;
   return init.headers as Record<string, string>;
+}
+
+/** 构造 SSE 流式响应 mock：frames 为逐次 read() 返回的块（含 \n\n 帧分隔符） */
+function sseStreamResponse(frames: string[]): Response {
+  const encoder = new TextEncoder();
+  let i = 0;
+  return {
+    ok: true,
+    body: {
+      getReader: () => ({
+        read: async () =>
+          i < frames.length
+            ? { done: false, value: encoder.encode(frames[i++]) }
+            : { done: true, value: undefined },
+      }),
+    },
+  } as unknown as Response;
 }
 
 describe('RegistryProvider', () => {
@@ -395,5 +416,60 @@ describe('RegistryProvider', () => {
     const body = getCallBody(fetchMock);
     expect(body.max_tokens).toBe(65536);
     expect(body.max_completion_tokens).toBeUndefined();
+  });
+
+  // T3.24：opencode 非流式 generate → 返回 content（Bearer 鉴权；无 reasoning 声明则不注入任何推理字段）
+  it('T3.24 opencode generate returns content, Bearer auth, no reasoning injected', async () => {
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: 'opencode answer', reasoning_content: 'hidden thinking' } }],
+      }),
+      text: () => Promise.resolve(''),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const p = new RegistryProvider(makeConfig({ apiKey: 'any-key' }), opencodeSpec);
+    const result = await p.generate('p', 's', { reasoning: true });
+    expect(result).toBe('opencode answer');
+    const headers = getCallHeaders(fetchMock);
+    expect(headers['Authorization']).toBe('Bearer any-key');
+    const body = getCallBody(fetchMock);
+    expect(body.thinking).toBeUndefined();
+    expect(body.reasoning_effort).toBeUndefined();
+    expect(body.chat_template_kwargs).toBeUndefined();
+  });
+
+  // T3.25：opencode 流式（真实捕获帧序列）：thinking 帧 → onThinking、content 帧 → onDelta、
+  // [DONE] 与其后空 choices 尾帧（usage/cost）不产生垃圾增量；请求体带 stream:true
+  it('T3.25 opencode streaming parses real captured frames without trailing garbage', async () => {
+    // 帧序列取自对代理的实测捕获（deepseek-v4-flash-free，stream:true）
+    const frames = [
+      'data: {"choices":[{"index":0,"finish_reason":null,"logprobs":null,"delta":{"role":"assistant","content":"","reasoning_content":null}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":null,"logprobs":null,"delta":{"reasoning_content":"We need answer in Chinese."}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":null,"logprobs":null,"delta":{"content":"好的：","reasoning_content":null}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":null,"logprobs":null,"delta":{"content":"一个笑话","reasoning_content":null}}]}\n\n',
+      'data: {"choices":[{"index":0,"finish_reason":"stop","logprobs":null,"delta":{"reasoning_content":null}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":88,"completion_tokens":55,"total_tokens":143}}\n\n',
+      'data: [DONE]\n\n',
+      // [DONE] 后的尾帧（无尾随 \n\n，走残留 buffer 冲刷路径）
+      'data: {"choices":[],"cost":"0"}',
+    ];
+    fetchMock = vi.fn().mockResolvedValue(sseStreamResponse(frames));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const p = new RegistryProvider(makeConfig({ provider: 'opencode' }), opencodeSpec);
+    const deltas: string[] = [];
+    const thinkings: string[] = [];
+    const full = await p.streamGenerate('p', 's', undefined, {
+      onDelta: (d) => deltas.push(d),
+      onThinking: (t) => thinkings.push(t),
+    });
+
+    expect(full).toBe('好的：一个笑话');
+    expect(deltas).toEqual(['好的：', '一个笑话']);
+    expect(thinkings).toEqual(['We need answer in Chinese.']);
+    // 真流式路径：请求体带 stream:true
+    expect(getCallBody(fetchMock).stream).toBe(true);
   });
 });
